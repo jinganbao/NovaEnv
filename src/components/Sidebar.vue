@@ -42,10 +42,6 @@ function isKind(value: RuntimeKind | "settings"): value is RuntimeKind {
         <span class="nav-name">设置</span>
         <span v-if="!isKind(selected)" class="nav-dot"></span>
       </button>
-      <div class="foot-info">
-        <span class="foot-label">管理目录</span>
-        <code class="foot-path">~/.novaenv</code>
-      </div>
     </div>
   </aside>
 </template>
@@ -150,23 +146,5 @@ function isKind(value: RuntimeKind | "settings"): value is RuntimeKind {
   background: var(--brand-soft);
   border-color: var(--brand);
   font-weight: 600;
-}
-
-.foot-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0 12px;
-}
-
-.foot-label {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.foot-path {
-  font-size: 11px;
-  color: var(--text-muted);
-  word-break: break-all;
 }
 </style>
