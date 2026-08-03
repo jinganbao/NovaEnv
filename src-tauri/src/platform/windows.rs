@@ -25,10 +25,8 @@ pub fn java_homes_from_registry() -> Vec<(String, String, String)> {
             let Ok(jdk_key) = root.open_subkey(family) else {
                 continue;
             };
-            let Ok(keys) = jdk_key.enum_keys() else {
-                continue;
-            };
-            for version_entry in keys.flatten() {
+            // winreg 0.55：enum_keys() 直接返回迭代器，每项为 io::Result<String>
+            for version_entry in jdk_key.enum_keys().flatten() {
                 let Ok(vkey) = jdk_key.open_subkey(&version_entry) else {
                     continue;
                 };
