@@ -43,11 +43,24 @@ const activating = ref(false);
 const uninstallTarget = ref<RuntimeVersion | null>(null);
 const uninstalling = ref(false);
 
-const feedback = ref<{ ok: boolean; text: string } | null>(null);
+const toast = ref<{ ok: boolean; text: string } | null>(null);
+let toastTimer: number | undefined;
+
+/** 显示短暂提示（toast），3 秒后自动消失 */
+function showToast(ok: boolean, text: string) {
+  toast.value = { ok, text };
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => (toast.value = null), 3000);
+}
+
+function clearToast() {
+  window.clearTimeout(toastTimer);
+  toast.value = null;
+}
 
 // 启动时静默检查更新
 useAppUpdate(config, {
-  error: (m) => (feedback.value = { ok: false, text: m }),
+  error: (m) => showToast(false, m),
   success: () => {},
 }).autoCheckOnStartup();
 
@@ -76,30 +89,27 @@ async function refresh() {
 // ---- 切换默认 ----
 
 async function openActivation(version: RuntimeVersion) {
-  feedback.value = null;
+  clearToast();
   try {
     pendingPreview.value = await previewActivation(version);
     pendingVersion.value = version;
   } catch (e) {
-    feedback.value = { ok: false, text: `生成预览失败: ${e}` };
+    showToast(false, `生成预览失败: ${e}`);
   }
 }
 
 async function doActivate() {
   if (!pendingVersion.value) return;
   activating.value = true;
-  feedback.value = null;
+  clearToast();
   try {
     await activate(pendingVersion.value);
-    feedback.value = {
-      ok: true,
-      text: `已将 ${pendingVersion.value.version} 设为默认，新打开的终端生效。`,
-    };
+    showToast(true, `已将 ${pendingVersion.value.version} 设为默认，新打开的终端生效。`);
     pendingVersion.value = null;
     pendingPreview.value = null;
     await refresh();
   } catch (e) {
-    feedback.value = { ok: false, text: `切换失败: ${e}` };
+    showToast(false, `切换失败: ${e}`);
   } finally {
     activating.value = false;
   }
@@ -113,21 +123,21 @@ function closeActivation() {
 // ---- 卸载 ----
 
 function openUninstall(version: RuntimeVersion) {
-  feedback.value = null;
+  clearToast();
   uninstallTarget.value = version;
 }
 
 async function doUninstall() {
   if (!uninstallTarget.value) return;
   uninstalling.value = true;
-  feedback.value = null;
+  clearToast();
   try {
     await uninstallVersion(uninstallTarget.value);
-    feedback.value = { ok: true, text: "卸载成功" };
+    showToast(true, "卸载成功");
     uninstallTarget.value = null;
     await refresh();
   } catch (e) {
-    feedback.value = { ok: false, text: `卸载失败: ${e}` };
+    showToast(false, `卸载失败: ${e}`);
   } finally {
     uninstalling.value = false;
   }
@@ -174,9 +184,13 @@ onMounted(() => {
     </header>
 
     <div v-if="error" class="banner error">{{ error }}</div>
-    <div v-if="feedback" :class="['banner', feedback.ok ? 'success' : 'error']">
-      {{ feedback.text }}
-    </div>
+
+    <Transition name="toast">
+      <div v-if="toast" :class="['toast', toast.ok ? 'toast-ok' : 'toast-err']">
+        <span class="toast-icon">{{ toast.ok ? "✓" : "✕" }}</span>
+        <span class="toast-text">{{ toast.text }}</span>
+      </div>
+    </Transition>
 
     <div class="body">
       <Sidebar
@@ -347,5 +361,63 @@ h1 {
   text-align: center;
   color: var(--text-secondary);
   padding: 80px 0;
+}
+
+/* ---- Toast（短暂提示，3 秒自动消失）---- */
+.toast {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(480px, 90vw);
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.toast-ok {
+  border-color: var(--success);
+}
+
+.toast-err {
+  border-color: var(--danger);
+}
+
+.toast-icon {
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.toast-ok .toast-icon {
+  color: var(--success);
+}
+
+.toast-err .toast-icon {
+  color: var(--danger);
+}
+
+.toast-text {
+  color: var(--text-primary);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-8px);
 }
 </style>
