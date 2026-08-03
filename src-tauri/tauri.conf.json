@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "NovaEnv",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "identifier": "com.novahub.novaenv",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -39,7 +39,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE3QkUxMEI3OEZGNTg3ODgKUldTSWgvV1B0eEMrcHdBNU9OTjZUQTN4MTBRU1Y3WmRaYTg1UHNQSlc0K2xobXllUjhtTmdQM00K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE3MkRDNTlFQjdENzBGQjYKUldTMkQ5ZTNuc1V0RjVyN1pobUJIM3RWM0JPRXBJOXo1RGxyanNLVDBWMzZzVXdLVkdIajNQTmwK",
       "endpoints": [
         "https://github.com/jinganbao/NovaEnv/releases/latest/download/latest.json"
       ],
