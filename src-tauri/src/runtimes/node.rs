@@ -127,8 +127,15 @@ fn candidate_dirs_macos() -> Vec<(PathBuf, &'static str)> {
     }
     // 官方安装
     dirs.push((PathBuf::from("/usr/local/node"), "official"));
-    // NovaEnv 管理安装
-    dirs.push((crate::installer::installs_dir().join("node"), "novaenv"));
+    // NovaEnv 管理安装（枚举每个已安装版本目录，与 java.rs 的 scan_jdk_dirs 同款模式）
+    let installs_node = crate::installer::installs_dir().join("node");
+    if let Ok(entries) = std::fs::read_dir(&installs_node) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                dirs.push((entry.path(), "novaenv"));
+            }
+        }
+    }
     dirs
 }
 
@@ -156,7 +163,14 @@ fn candidate_dirs_windows() -> Vec<(PathBuf, &'static str)> {
     if let Some(local) = std::env::var_os("LOCALAPPDATA") {
         dirs.push((PathBuf::from(&local).join("Programs/nodejs"), "official"));
     }
-    // NovaEnv 管理安装
-    dirs.push((crate::installer::installs_dir().join("node"), "novaenv"));
+    // NovaEnv 管理安装（枚举每个已安装版本目录）
+    let installs_node = crate::installer::installs_dir().join("node");
+    if let Ok(entries) = std::fs::read_dir(&installs_node) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                dirs.push((entry.path(), "novaenv"));
+            }
+        }
+    }
     dirs
 }

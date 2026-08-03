@@ -123,8 +123,15 @@ fn candidate_dirs_macos() -> Vec<(PathBuf, &'static str)> {
             }
         }
     }
-    // NovaEnv 管理安装
-    dirs.push((crate::installer::installs_dir().join("go"), "novaenv"));
+    // NovaEnv 管理安装（枚举每个已安装版本目录）
+    let installs_go = crate::installer::installs_dir().join("go");
+    if let Ok(entries) = std::fs::read_dir(&installs_go) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                dirs.push((entry.path(), "novaenv"));
+            }
+        }
+    }
     dirs
 }
 
@@ -142,7 +149,14 @@ fn candidate_dirs_windows() -> Vec<(PathBuf, &'static str)> {
         }
         dirs.push((user.join("go"), "user")); // 用户安装的 go（go.exe 直接位于根目录）
     }
-    // NovaEnv 管理安装
-    dirs.push((crate::installer::installs_dir().join("go"), "novaenv"));
+    // NovaEnv 管理安装（枚举每个已安装版本目录）
+    let installs_go = crate::installer::installs_dir().join("go");
+    if let Ok(entries) = std::fs::read_dir(&installs_go) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                dirs.push((entry.path(), "novaenv"));
+            }
+        }
+    }
     dirs
 }
