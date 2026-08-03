@@ -222,7 +222,11 @@ fn download(
                     version,
                     "downloading",
                     Some(pct),
-                    format!("下载中 {downloaded}/{total} 字节"),
+                    format!(
+                        "下载中 {:.1} / {:.1} MB",
+                        downloaded as f64 / 1024.0 / 1024.0,
+                        total as f64 / 1024.0 / 1024.0
+                    ),
                 );
             }
         } else if downloaded - last_emitted >= 2 * 1024 * 1024 {
