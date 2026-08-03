@@ -37,6 +37,14 @@ export interface InstallProgress {
   message: string;
 }
 
+/** 安装结果：同大版本旧版本替换信息 */
+export interface InstallResult {
+  /** 被自动替换移除的旧版本号列表 */
+  removed: string[];
+  /** 旧版本曾是默认，已自动把新版本设为默认 */
+  promoted: boolean;
+}
+
 /** 单个运行时在管理目录中的已安装版本 */
 export interface ManagedRuntimeInfo {
   kind: RuntimeKind;

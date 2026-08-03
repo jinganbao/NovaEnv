@@ -9,8 +9,8 @@ mod runtimes;
 
 use activation::ActivationPreview;
 use models::{
-    AvailableVersionGroup, InstallRequest, ManageInfo, RuntimesPayload, RuntimeKind,
-    RuntimeVersion,
+    AvailableVersionGroup, InstallRequest, InstallResult, ManageInfo, RuntimesPayload,
+    RuntimeKind, RuntimeVersion,
 };
 
 /// 扫描全部运行时（JDK / Node / Go），返回概览 + 完整版本列表。
@@ -45,7 +45,7 @@ fn available_versions(
 async fn install_version(
     app: tauri::AppHandle,
     request: InstallRequest,
-) -> Result<(), String> {
+) -> Result<InstallResult, String> {
     tauri::async_runtime::spawn_blocking(move || installer::install(&app, &request))
         .await
         .map_err(|e| format!("安装任务异常: {e}"))?

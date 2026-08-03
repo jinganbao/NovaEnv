@@ -82,6 +82,16 @@ pub struct InstallRequest {
     pub version: String,
 }
 
+/// 安装结果：同大版本旧版本替换信息
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallResult {
+    /// 被自动替换移除的旧版本号列表
+    pub removed: Vec<String>,
+    /// 旧版本曾是默认，已自动把新版本设为默认
+    pub promoted: bool,
+}
+
 /// 安装进度事件（通过 tauri 事件 `install-progress` 推送）
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

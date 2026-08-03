@@ -112,7 +112,13 @@ async function doInstall(g: AvailableVersionGroup, target: string) {
   result.value = null;
   progress.value = null;
   try {
-    await installVersion(props.kind, target);
+    const res = await installVersion(props.kind, target);
+    let text = `安装完成：${target}`;
+    if (res.removed.length) {
+      text = `已安装 ${target}，自动替换同大版本旧版本：${res.removed.join("、")}`;
+      if (res.promoted) text += "，并已自动设为默认";
+    }
+    result.value = { ok: true, text };
   } catch (e) {
     result.value = { ok: false, text: `安装失败: ${e}` };
   } finally {

@@ -317,8 +317,10 @@ fn locate_extracted(
 
 // ---------- 安装 / 卸载主流程 ----------
 
-/// 安装指定版本的运行时
-pub fn install(app: &AppHandle, request: &InstallRequest) -> Result<(), String> {
+/// 安装指定版本的运行时。
+/// 同一大版本只保留最新小版本：安装成功后自动移除同大版本的旧版本；
+/// 若被移除的旧版本是默认版本，则自动把新版本设为默认。
+pub fn install(app: &AppHandle, request: &InstallRequest) -> Result<crate::models::InstallResult, String> {
     let _guard = INSTALL_LOCK
         .try_lock()
         .map_err(|_| "已有安装任务正在进行中，请稍候".to_string())?;
@@ -366,7 +368,74 @@ pub fn install(app: &AppHandle, request: &InstallRequest) -> Result<(), String> 
     let _ = std::fs::remove_file(&archive);
 
     emit_progress(app, kind, &final_version, "done", Some(100), "安装完成");
-    Ok(())
+
+    // 6) 同大版本只保留最新：自动替换旧小版本
+    Ok(cleanup_same_major(kind, &final_version, &dest))
+}
+
+/// 同大版本只保留最新小版本：移除同大版本的旧版本；
+/// 若被移除的旧版本是默认版本，自动把新版本设为默认。
+fn cleanup_same_major(
+    kind: RuntimeKind,
+    new_version: &str,
+    new_path: &std::path::Path,
+) -> crate::models::InstallResult {
+    use crate::models::InstallResult;
+
+    let mut result = InstallResult {
+        removed: Vec::new(),
+        promoted: false,
+    };
+
+    // 安装前的版本快照（用于判断旧版本是否默认）
+    let before = crate::runtimes::scan_all()
+        .ok()
+        .into_iter()
+        .flat_map(|p| p.versions)
+        .filter(|v| v.kind == kind && v.version != new_version)
+        .collect::<Vec<_>>();
+    let old_default = before
+        .iter()
+        .find(|v| v.is_default && major_of(kind, &v.version) == major_of(kind, new_version));
+
+    // 枚举同大版本的其他版本目录并移除
+    let dir = installs_dir().join(kind_dir(kind));
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+                continue;
+            };
+            if name == new_version {
+                continue;
+            }
+            if major_of(kind, &name) == major_of(kind, new_version)
+                && std::fs::remove_dir_all(&path).is_ok()
+            {
+                result.removed.push(name);
+            }
+        }
+    }
+
+    // 旧版本曾是默认 → 新版本自动接管默认
+    if old_default.is_some() && !result.removed.is_empty() {
+        let version = crate::models::RuntimeVersion {
+            kind,
+            version: new_version.to_string(),
+            vendor: "novaenv".to_string(),
+            path: new_path.to_string_lossy().into_owned(),
+            is_default: false,
+            managed: true,
+        };
+        if crate::activation::activate(&version).is_ok() {
+            result.promoted = true;
+        }
+    }
+
+    result
 }
 
 /// 卸载 NovaEnv 管理的版本

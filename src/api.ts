@@ -4,6 +4,7 @@ import type {
   ActivationPreview,
   AvailableVersionGroup,
   InstallProgress,
+  InstallResult,
   ManageInfo,
   RuntimesPayload,
   RuntimeKind,
@@ -39,7 +40,7 @@ export function availableVersions(
 export function installVersion(
   kind: RuntimeKind,
   version: string,
-): Promise<void> {
+): Promise<InstallResult> {
   return invoke("install_version", { request: { kind, version } });
 }
 
