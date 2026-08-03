@@ -105,28 +105,23 @@ fn zshrc_path() -> PathBuf {
 #[cfg(target_os = "macos")]
 fn preview_macos(version: &RuntimeVersion) -> Result<ActivationPreview, String> {
     let config = zshrc_path();
-    let backup = PathBuf::from(format!("{}.novaenv.bak", config.display()));
     Ok(ActivationPreview {
         config_file: Some(config.to_string_lossy().into_owned()),
         lines: shell_lines(version),
-        backup_path: Some(backup.to_string_lossy().into_owned()),
-        note: "切换后请重新打开终端（或执行 source ~/.zshrc）生效；原配置已备份。".to_string(),
+        backup_path: None,
+        note: "切换后自动执行 source ~/.zshrc 刷新 shell 配置。".to_string(),
     })
 }
 
 #[cfg(target_os = "macos")]
 fn activate_macos(version: &RuntimeVersion) -> Result<(), String> {
     let config = zshrc_path();
-    let backup = PathBuf::from(format!("{}.novaenv.bak", config.display()));
     let lines = shell_lines(version);
 
     // 1) 读取现有内容（文件不存在视为空）
     let existing = std::fs::read_to_string(&config).unwrap_or_default();
 
-    // 2) 写入前备份
-    std::fs::write(&backup, &existing).map_err(|e| format!("备份失败（{}）: {e}", backup.display()))?;
-
-    // 3) 构造 NovaEnv 管理块并替换/追加
+    // 2) 构造 NovaEnv 管理块并替换/追加
     let block = format!("{BLOCK_START}\n{}\n{BLOCK_END}\n", lines.join("\n"));
     let new_content = if let Some(start) = existing.find(BLOCK_START) {
         let rest = &existing[start..];
@@ -144,8 +139,15 @@ fn activate_macos(version: &RuntimeVersion) -> Result<(), String> {
         content
     };
 
-    // 4) 写回
-    std::fs::write(&config, new_content).map_err(|e| format!("写入失败（{}）: {e}", config.display()))?;
+    // 3) 写回
+    std::fs::write(&config, new_content)
+        .map_err(|e| format!("写入失败（{}）: {e}", config.display()))?;
+
+    // 4) 自动执行 source ~/.zshrc 刷新 shell 配置（尽力而为，失败不阻塞）
+    let _ = std::process::Command::new("zsh")
+        .args(["-c", "source ~/.zshrc"])
+        .status();
+
     Ok(())
 }
 
