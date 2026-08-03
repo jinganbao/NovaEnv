@@ -105,24 +105,11 @@ fn zshrc_path() -> PathBuf {
 #[cfg(target_os = "macos")]
 fn preview_macos(version: &RuntimeVersion) -> Result<ActivationPreview, String> {
     let config = zshrc_path();
-    let has_mise = std::process::Command::new("mise")
-        .arg("--version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-    let note = if has_mise {
-        format!(
-            "切换后自动执行 source ~/.zshrc，并移除 mise 对 {} 的全局接管（由 NovaEnv 管理）。",
-            version.kind.display_name()
-        )
-    } else {
-        "切换后自动执行 source ~/.zshrc 刷新 shell 配置。".to_string()
-    };
     Ok(ActivationPreview {
         config_file: Some(config.to_string_lossy().into_owned()),
         lines: shell_lines(version),
         backup_path: None,
-        note,
+        note: "切换后自动执行 source ~/.zshrc 刷新 shell 配置。".to_string(),
     })
 }
 
@@ -134,63 +121,92 @@ fn activate_macos(version: &RuntimeVersion) -> Result<(), String> {
     // 1) 读取现有内容（文件不存在视为空）
     let existing = std::fs::read_to_string(&config).unwrap_or_default();
 
-    // 2) 构造 NovaEnv 管理块并替换/追加
-    let block = format!("{BLOCK_START}\n{}\n{BLOCK_END}\n", lines.join("\n"));
-    let new_content = if let Some(start) = existing.find(BLOCK_START) {
-        let rest = &existing[start..];
-        let end_offset = rest
-            .find(BLOCK_END)
-            .ok_or("~/.zshrc 中的 NovaEnv 管理块缺少结束标记，请手动检查该文件")?;
-        let end = start + end_offset + BLOCK_END.len();
-        format!("{}{}{}", &existing[..start], block, &existing[end..])
-    } else {
-        let mut content = existing;
-        if !content.is_empty() && !content.ends_with('\n') {
-            content.push('\n');
+    // 2) 按运行时粒度更新 NovaEnv 管理块（Java/Node/Go 默认互不覆盖）
+    let new_content = upsert_managed_block(&existing, &lines, version.kind)?;
+
+    // 3) 写回（临时文件 + 原子替换，避免写入中断损坏配置）
+    let tmp = config.with_extension("zshrc.tmp");
+    std::fs::write(&tmp, &new_content).map_err(|e| format!("写入配置失败: {e}"))?;
+    std::fs::rename(&tmp, &config).map_err(|e| format!("替换配置失败: {e}"))?;
+
+    // 4) 同步当前进程环境，立即生效
+    for line in &lines {
+        if let Some((k, v)) = parse_export(line) {
+            std::env::set_var(k, v);
         }
-        content.push_str(&block);
-        content
-    };
+    }
+    if let Some(home_line) = lines.first() {
+        if let Some((_k, v)) = parse_export(home_line) {
+            let bin = std::path::Path::new(&v).join("bin");
+            if let Some(path) = std::env::var_os("PATH") {
+                let mut paths: Vec<_> = std::env::split_paths(&path).collect();
+                paths.insert(0, bin);
+                if let Ok(new_path) = std::env::join_paths(paths) {
+                    std::env::set_var("PATH", new_path);
+                }
+            }
+        }
+    }
 
-    // 3) 写回
-    std::fs::write(&config, new_content)
-        .map_err(|e| format!("写入失败（{}）: {e}", config.display()))?;
-
-    // 4) 自动执行 source ~/.zshrc 刷新 shell 配置（尽力而为，失败不阻塞）
-    let _ = std::process::Command::new("zsh")
-        .args(["-c", "source ~/.zshrc"])
-        .status();
-
-    // 5) 移除 mise 对该运行时的全局接管（若用户使用 mise 管理该运行时，
-    //    否则 mise activate 会把旧版本插到 PATH 最前，覆盖本次切换）
-    release_mise(version.kind);
-
+    // 5) 当前进程环境已由步骤 4 同步；新终端启动时自动读取新配置
     Ok(())
 }
 
-/// 移除 mise 全局配置中对指定运行时的接管：`mise rm -g <tool>`
-/// 让 .zshrc 中 NovaEnv 的 PATH 前置生效（mise 不可用时静默跳过）。
-/// 仅移除全局配置，不影响项目级 mise.toml；用户可随时 `mise use -g` 重新接管。
-#[cfg(target_os = "macos")]
-fn release_mise(kind: RuntimeKind) {
-    let tool = match kind {
-        RuntimeKind::Java => "java",
-        RuntimeKind::Node => "node",
-        RuntimeKind::Go => "go",
-    };
-    let mise_ok = std::process::Command::new("mise")
-        .arg("--version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-    if !mise_ok {
-        return;
-    }
-    let _ = std::process::Command::new("mise")
-        .args(["rm", "-g", tool])
-        .output();
+/// 解析 `export K="V"` 行
+fn parse_export(line: &str) -> Option<(String, String)> {
+    let rest = line.strip_prefix("export ")?;
+    let (k, v) = rest.split_once('=')?;
+    Some((
+        k.trim().to_string(),
+        v.trim().trim_matches('"').trim_matches('\'').to_string(),
+    ))
 }
 
+/// 更新 .zshrc 中的 NovaEnv 管理块：
+/// - 块内已存在目标运行时的行 → 替换为新的两行
+/// - 块内不存在 → 追加到块尾（其他运行时的默认保留）
+/// - 无块 → 创建新块
+#[cfg(target_os = "macos")]
+fn upsert_managed_block(
+    existing: &str,
+    lines: &[String],
+    kind: RuntimeKind,
+) -> Result<String, String> {
+    let var = kind.env_var_name();
+    let home_prefix = format!("export {var}=");
+    let path_prefix = format!("export PATH=\"${var}/bin");
+
+    let Some(start) = existing.find(BLOCK_START) else {
+        // 无管理块 → 在文件末尾追加
+        let block = format!("{BLOCK_START}\n{}\n{BLOCK_END}\n", lines.join("\n"));
+        return Ok(format!("{existing}\n{block}"));
+    };
+
+    let rest = &existing[start..];
+    let end_offset = rest
+        .find(BLOCK_END)
+        .ok_or("~/.zshrc 中的 NovaEnv 管理块缺少结束标记，请手动检查该文件")?;
+    let end = start + end_offset + BLOCK_END.len();
+    let body = &existing[start + BLOCK_START.len()..end - BLOCK_END.len()];
+
+    // 保留块内非目标运行时的行，剔除目标运行时的旧行
+    let mut kept: Vec<&str> = Vec::new();
+    for line in body.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with(&home_prefix) || line.starts_with(&path_prefix) {
+            continue; // 目标运行时旧行，将被替换
+        }
+        kept.push(line);
+    }
+    // 追加目标运行时新行
+    kept.extend(lines.iter().map(String::as_str));
+
+    let block = format!("{BLOCK_START}\n{}\n{BLOCK_END}\n", kept.join("\n"));
+    Ok(format!("{}{}{}", &existing[..start], block, &existing[end..]))
+}
 // ---------- Windows ----------
 
 #[cfg(target_os = "windows")]
