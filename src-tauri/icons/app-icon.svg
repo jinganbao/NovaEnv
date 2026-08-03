@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="196" y1="128" x2="828" y2="896" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#10B981"/>
+      <stop offset="0.52" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#0F172A"/>
+    </linearGradient>
+    <linearGradient id="win" x1="272" y1="284" x2="752" y2="666" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0B1220"/>
+      <stop offset="1" stop-color="#1F2937"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="28" stdDeviation="28" flood-color="#020617" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <rect x="34" y="34" width="956" height="956" rx="196" fill="none" stroke="#FFFFFF" stroke-opacity="0.10" stroke-width="8"/>
+
+  <g filter="url(#softShadow)">
+    <!-- 终端窗口 -->
+    <rect x="272" y="284" width="480" height="382" rx="40" fill="url(#win)"/>
+    <!-- 标题栏圆点（红黄绿） -->
+    <circle cx="322" cy="338" r="14" fill="#F87171"/>
+    <circle cx="366" cy="338" r="14" fill="#FBBF24"/>
+    <circle cx="410" cy="338" r="14" fill="#4ADE80"/>
+    <!-- 命令提示符 >_ -->
+    <path d="M318 474 L372 432 L318 390" stroke="#34D399" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M420 474 L556 474" stroke="#E7ECF3" stroke-width="26" stroke-linecap="round"/>
+    <!-- 闪烁光标 -->
+    <rect x="592" y="416" width="34" height="88" rx="10" fill="#34D399"/>
+    <!-- 下方代码行装饰 -->
+    <rect x="318" y="544" width="236" height="22" rx="11" fill="#334155"/>
+    <rect x="318" y="588" width="158" height="22" rx="11" fill="#475569"/>
+  </g>
+
+  <!-- 装饰圆点（呼应 NovaMsg 系列） -->
+  <circle cx="782" cy="182" r="26" fill="#6EE7B7"/>
+  <circle cx="242" cy="202" r="18" fill="#BAE6FD"/>
+</svg>

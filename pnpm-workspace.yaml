@@ -1,0 +1,10 @@
+# pnpm 11 workspace 配置
+# allowBuilds: 允许依赖包执行 postinstall 构建脚本
+#   - esbuild: Vite 依赖，postinstall 需下载平台二进制
+#   - @tauri-apps/cli: Tauri CLI，postinstall 需下载 Rust 工具链二进制
+# confirmModulesPurge: false —— 非 TTY 环境（IDE 终端/CI）下
+#   node_modules 状态不一致时直接重建，不再要求交互确认
+allowBuilds:
+  esbuild: true
+  '@tauri-apps/cli': true
+confirmModulesPurge: false

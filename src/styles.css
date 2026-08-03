@@ -1,0 +1,126 @@
+/* ============================================================
+   NovaEnv 主题系统（参考 NovaMsg 同款设计语言）
+   变量层级：bg-app / bg-sider / bg-panel / bg-input + 双层边框
+   品牌色：#34D399（NovaEnv emerald）
+   默认暗色（开发工具定位），跟随系统切换亮色
+   ============================================================ */
+
+:root {
+  /* 暗色主题（默认） */
+  --bg-app: #111418;
+  --bg-sider: #15191e;
+  --bg-panel: #1b2027;
+  --bg-panel-hover: #222832;
+  --bg-input: #2a3038;
+  --border-subtle: #2b323c;
+  --border-strong: #39424e;
+  --text-primary: #e7ecf3;
+  --text-secondary: #9aa5b5;
+  --text-muted: #6f7a89;
+  --brand: #34d399;
+  --brand-hover: #59dbab;
+  --brand-active: #2bad7e;
+  --brand-soft: rgba(52, 211, 153, 0.14);
+  --focus: #7dd3fc;
+  --danger: #f87171;
+  --warning: #fbbf24;
+  --success: #4ade80;
+  --danger-soft: rgba(248, 113, 113, 0.12);
+  --success-soft: rgba(74, 222, 128, 0.12);
+  --shadow-strong: rgba(0, 0, 0, 0.6);
+
+  color-scheme: dark;
+
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    /* 亮色主题 */
+    --bg-app: #f7f9fc;
+    --bg-sider: #eef3f7;
+    --bg-panel: #ffffff;
+    --bg-panel-hover: #eaf0f7;
+    --bg-input: #f1f5f9;
+    --border-subtle: #d8e0ea;
+    --border-strong: #bcc8d6;
+    --text-primary: #17202a;
+    --text-secondary: #5d6978;
+    --text-muted: #7b8797;
+    --brand: #059669;
+    --brand-hover: #047857;
+    --brand-active: #065f46;
+    --brand-soft: rgba(5, 150, 105, 0.12);
+    --focus: #0284c7;
+    --danger: #dc2626;
+    --warning: #b7791f;
+    --success: #15803d;
+    --danger-soft: rgba(220, 38, 38, 0.08);
+    --success-soft: rgba(21, 128, 61, 0.08);
+    --shadow-strong: rgba(15, 23, 42, 0.16);
+
+    color-scheme: light;
+  }
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-app);
+  color: var(--text-primary);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app {
+  height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+code,
+pre {
+  font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

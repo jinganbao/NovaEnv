@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "NovaEnv 主窗口默认能力：核心 API + 应用自定义 commands",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

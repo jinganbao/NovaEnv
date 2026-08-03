@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# pnpm store
+.pnpm-store/
+
+# Build output
+dist/
+src-tauri/target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Tauri generated
+src-tauri/gen/
+
+# Logs
+*.log
+
+# Reasonix
+.reasonix
