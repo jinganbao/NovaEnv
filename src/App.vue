@@ -93,7 +93,7 @@ async function doActivate() {
     await activate(pendingVersion.value);
     feedback.value = {
       ok: true,
-      text: "切换成功！已自动执行 source ~/.zshrc，新打开的终端将使用新配置。",
+      text: `已将 ${pendingVersion.value.version} 设为默认，新打开的终端生效。`,
     };
     pendingVersion.value = null;
     pendingPreview.value = null;
