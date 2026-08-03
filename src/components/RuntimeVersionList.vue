@@ -239,7 +239,12 @@ onUnmounted(() => unlisten?.());
           <div class="bar">
             <div
               class="fill"
-              :style="{ width: (progress.percent ?? 0) + '%' }"
+              :class="{ indeterminate: progress.percent == null }"
+              :style="
+                progress.percent != null
+                  ? { width: progress.percent + '%' }
+                  : {}
+              "
             ></div>
           </div>
           <span class="msg">{{ progress.message }}</span>
@@ -434,6 +439,20 @@ h3 {
   height: 100%;
   background: var(--brand);
   transition: width 0.2s;
+}
+
+.fill.indeterminate {
+  width: 40%;
+  animation: indeterminate-slide 1.2s infinite ease-in-out;
+}
+
+@keyframes indeterminate-slide {
+  0% {
+    margin-left: -40%;
+  }
+  100% {
+    margin-left: 100%;
+  }
 }
 
 .msg {

@@ -54,10 +54,11 @@ fn kind_dir(kind: RuntimeKind) -> &'static str {
 
 // ---------- 下载 URL 构造 ----------
 
-/// 目标平台 os/arch 标识（按发行源约定）
-fn os_arch() -> (&'static str, &'static str) {
+/// Azul Zulu 平台参数：(os, arch, archive_type)
+/// 注意 Zulu 的 arch 命名是 x86_64（非 x64），archive_type 为 tar.gz/zip
+fn zulu_platform() -> (&'static str, &'static str, &'static str) {
     #[cfg(target_os = "macos")]
-    let os = "mac";
+    let os = "macos";
     #[cfg(target_os = "windows")]
     let os = "windows";
     #[cfg(target_os = "linux")]
@@ -65,27 +66,82 @@ fn os_arch() -> (&'static str, &'static str) {
     #[cfg(target_arch = "aarch64")]
     let arch = "aarch64";
     #[cfg(not(target_arch = "aarch64"))]
-    let arch = "x64";
-    (os, arch)
+    let arch = "x86_64";
+    let archive_type = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
+    (os, arch, archive_type)
+}
+
+/// 请求 Azul Zulu packages API（可按 java_version 过滤）
+fn zulu_packages(java_version: Option<&str>) -> Result<Vec<serde_json::Value>, String> {
+    let (os, arch, archive_type) = zulu_platform();
+    let mut url = format!(
+        "https://api.azul.com/metadata/v1/zulu/packages/?os={os}&arch={arch}&archive_type={archive_type}&java_package_type=jdk&release_status=ga&page_size=10"
+    );
+    if let Some(v) = java_version {
+        url.push_str(&format!("&java_version={v}"));
+    } else {
+        url.push_str("&latest=true");
+    }
+    let json = http_get_json(&url)?;
+    let arr = json.as_array().ok_or("Zulu 响应格式异常")?.clone();
+    Ok(arr)
+}
+
+/// 从 Zulu 包列表中挑选标准 JDK 包（排除 fx / crac 变体）
+fn zulu_pick(packages: &[serde_json::Value]) -> Option<&serde_json::Value> {
+    zulu_pick_all(packages).into_iter().next()
+}
+
+/// 收集所有标准 JDK 包（排除 fx / crac 变体）
+fn zulu_pick_all(packages: &[serde_json::Value]) -> Vec<&serde_json::Value> {
+    packages
+        .iter()
+        .filter(|p| {
+            p.get("name")
+                .and_then(|n| n.as_str())
+                .map(|n| !n.contains("fx") && !n.contains("crac"))
+                .unwrap_or(false)
+        })
+        .collect()
+}
+
+/// 解析 Zulu java_version 数组（[17, 0, 20] → "17.0.20"）
+fn zulu_java_version(pkg: &serde_json::Value) -> Option<String> {
+    let arr = pkg.get("java_version")?.as_array()?;
+    let parts: Vec<String> = arr
+        .iter()
+        .filter_map(|n| n.as_i64().map(|i| i.to_string()))
+        .collect();
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("."))
+    }
 }
 
 /// 构造下载 URL 与本地归档文件路径
 fn download_url(kind: RuntimeKind, version: &str) -> Result<(String, PathBuf), String> {
-    let (os, arch) = os_arch();
     let downloads = installs_dir().join("_downloads");
     std::fs::create_dir_all(&downloads)
         .map_err(|e| format!("创建下载目录失败: {e}"))?;
 
     match kind {
         RuntimeKind::Java => {
-            // Adoptium Temurin：binary/latest/<feature>/ga/...
-            // 只接受大版本号（如 17、21），具体小版本（17.0.20）需提取 feature 段
+            // Azul Zulu：请求 packages API 获取标准 JDK 包（排除 fx/crac）的下载地址
             let feature = version.split('.').next().unwrap_or(version);
-            let url = format!(
-                "https://api.adoptium.net/v3/binary/latest/{feature}/ga/{os}/{arch}/jdk/hotspot/normal/eclipse"
-            );
-            let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
-            Ok((url, downloads.join(format!("temurin-{feature}.{ext}"))))
+            let packages = zulu_packages(Some(feature))?;
+            let pkg = zulu_pick(&packages).ok_or("Zulu 未返回可用 JDK 包")?;
+            let url = pkg
+                .get("download_url")
+                .and_then(|v| v.as_str())
+                .ok_or("Zulu 下载地址缺失")?
+                .to_string();
+            let file_name = url
+                .rsplit('/')
+                .next()
+                .unwrap_or("zulu-jdk.tar.gz")
+                .to_string();
+            Ok((url, downloads.join(file_name)))
         }
         RuntimeKind::Node => {
             let (os_name, arch_name) = if cfg!(target_os = "macos") {
@@ -145,6 +201,7 @@ fn download(
     let mut buf = [0u8; 128 * 1024];
     let mut downloaded: u64 = 0;
     let mut last_pct: u32 = 0;
+    let mut last_emitted: u64 = 0;
     loop {
         let n = reader
             .read(&mut buf)
@@ -168,6 +225,17 @@ fn download(
                     format!("下载中 {downloaded}/{total} 字节"),
                 );
             }
+        } else if downloaded - last_emitted >= 2 * 1024 * 1024 {
+            // 无 Content-Length 时每 2MB 上报一次已下载量（前端显示不定进度）
+            last_emitted = downloaded;
+            emit_progress(
+                app,
+                kind,
+                version,
+                "downloading",
+                None,
+                format!("已下载 {:.1} MB", downloaded as f64 / 1024.0 / 1024.0),
+            );
         }
     }
     Ok(())
@@ -558,31 +626,26 @@ fn http_get_json(url: &str) -> Result<serde_json::Value, String> {
     serde_json::from_str(&body).map_err(|e| format!("解析版本源失败: {e}"))
 }
 
-/// Adoptium：available_releases 拿 majors（LTS + 最新 2 个非 LTS），
-/// 逐 major 并行拉取该 feature 下最近的 GA 版本（semver 如 21.0.12+8.0.LTS）
+/// Azul Zulu：LTS（8/11/17/21/25）+ 最新非 LTS，
+/// 逐 major 并行请求 packages API 获取标准 JDK 版本列表
 fn available_java() -> Result<Vec<AvailableVersion>, String> {
-    let info = http_get_json("https://api.adoptium.net/v3/info/available_releases")?;
-    let mut lts: Vec<i64> = info
-        .get("available_lts_releases")
-        .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|n| n.as_i64()).collect())
-        .unwrap_or_default();
-    let mut all: Vec<i64> = info
-        .get("available_releases")
-        .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|n| n.as_i64()).collect())
-        .unwrap_or_default();
-    lts.sort_unstable();
-    all.sort_unstable();
+    const LTS: [i64; 5] = [8, 11, 17, 21, 25];
+    let mut majors: Vec<i64> = LTS.to_vec();
 
-    // majors：全部 LTS + 最新 1 个非 LTS（减少首次请求数量）
-    let mut majors: Vec<i64> = lts.clone();
-    for m in all.iter().rev() {
-        if !majors.contains(m) {
-            majors.push(*m);
-        }
-        if majors.len() >= lts.len() + 1 {
-            break;
+    // 最新非 LTS major：不带 java_version 的 latest 请求
+    if let Ok(packages) = zulu_packages(None) {
+        if let Some(pkg) = zulu_pick(&packages) {
+            if let Some(version) = zulu_java_version(pkg) {
+                if let Some(m) = version
+                    .split('.')
+                    .next()
+                    .and_then(|s| s.parse::<i64>().ok())
+                {
+                    if !majors.contains(&m) {
+                        majors.push(m);
+                    }
+                }
+            }
         }
     }
     majors.sort_unstable();
@@ -593,42 +656,26 @@ fn available_java() -> Result<Vec<AvailableVersion>, String> {
         for major in &majors {
             let major = *major;
             let results = &results;
-            let lts = &lts;
             s.spawn(move || {
-                let url = format!(
-                    "https://api.adoptium.net/v3/assets/feature_releases/{major}/ga?page_size=5&image_type=jdk"
-                );
-                let Ok(json) = http_get_json(&url) else {
+                let Ok(packages) = zulu_packages(Some(&major.to_string())) else {
                     return;
                 };
-                let Some(arr) = json.as_array() else {
-                    return;
-                };
-                let mut items = Vec::new();
-                for item in arr {
-                    let Some(semver) = item
-                        .get("version_data")
-                        .and_then(|v| v.get("semver"))
-                        .and_then(|v| v.as_str())
-                    else {
+                for pkg in zulu_pick_all(&packages) {
+                    let Some(version) = zulu_java_version(pkg) else {
                         continue;
                     };
-                    // Adoptium semver 形如 "21.0.12+8.0.LTS"，规范化为 3 段
-                    // （与安装后 release 文件的 JAVA_VERSION 一致，便于列表对账）
-                    let version = semver.split('+').next().unwrap_or(semver).to_string();
-                    items.push(AvailableVersion {
+                    results.lock().unwrap().push(AvailableVersion {
                         version,
-                        is_lts: lts.contains(&major),
+                        is_lts: LTS.contains(&major),
                     });
                 }
-                results.lock().unwrap().extend(items);
             });
         }
     });
 
     let versions = results.into_inner().unwrap();
     if versions.is_empty() {
-        return Err("Adoptium 未返回可用版本".to_string());
+        return Err("Azul Zulu 未返回可用版本".to_string());
     }
     Ok(versions)
 }
