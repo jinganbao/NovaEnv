@@ -92,13 +92,14 @@ fn scan_macos() -> Vec<(String, String, String)> {
     }
 
     // 2) 兜底：标准目录扫描（release 文件解析）
+    //    macOS 的 .jdk 与 Zulu 包均为 Contents/Home 布局，需先检查该层级
     let mut dirs = vec![PathBuf::from("/Library/Java/JavaVirtualMachines")];
     if let Some(home) = platform::home_dir() {
         dirs.push(home.join("Library/Java/JavaVirtualMachines"));
     }
     // NovaEnv 管理安装
     dirs.push(crate::installer::installs_dir().join("java"));
-    result.extend(scan_jdk_dirs(&dirs, false));
+    result.extend(scan_jdk_dirs(&dirs, true));
 
     result
 }
