@@ -105,11 +105,21 @@ fn zshrc_path() -> PathBuf {
 #[cfg(target_os = "macos")]
 fn preview_macos(version: &RuntimeVersion) -> Result<ActivationPreview, String> {
     let config = zshrc_path();
+    let has_mise = std::process::Command::new("mise")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    let note = if has_mise {
+        "切换后自动执行 source ~/.zshrc，并同步 mise 全局配置。".to_string()
+    } else {
+        "切换后自动执行 source ~/.zshrc 刷新 shell 配置。".to_string()
+    };
     Ok(ActivationPreview {
         config_file: Some(config.to_string_lossy().into_owned()),
         lines: shell_lines(version),
         backup_path: None,
-        note: "切换后自动执行 source ~/.zshrc 刷新 shell 配置。".to_string(),
+        note,
     })
 }
 
@@ -148,7 +158,33 @@ fn activate_macos(version: &RuntimeVersion) -> Result<(), String> {
         .args(["-c", "source ~/.zshrc"])
         .status();
 
+    // 5) 同步 mise 全局配置（若用户使用 mise 管理该运行时，
+    //    否则 mise activate 会把旧版本插到 PATH 最前，覆盖本次切换）
+    sync_mise(version.kind, &version.path);
+
     Ok(())
+}
+
+/// 同步 mise 全局配置：`mise use -g <tool>@path:<安装路径>`
+/// 让 mise 的 PATH 注入指向 NovaEnv 管理的版本（mise 不可用时静默跳过）。
+#[cfg(target_os = "macos")]
+fn sync_mise(kind: RuntimeKind, path: &str) {
+    let tool = match kind {
+        RuntimeKind::Java => "java",
+        RuntimeKind::Node => "node",
+        RuntimeKind::Go => "go",
+    };
+    let mise_ok = std::process::Command::new("mise")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if !mise_ok {
+        return;
+    }
+    let _ = std::process::Command::new("mise")
+        .args(["use", "-g", &format!("{tool}@path:{path}")])
+        .output();
 }
 
 // ---------- Windows ----------
