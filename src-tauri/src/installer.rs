@@ -60,6 +60,8 @@ fn os_arch() -> (&'static str, &'static str) {
     let os = "mac";
     #[cfg(target_os = "windows")]
     let os = "windows";
+    #[cfg(target_os = "linux")]
+    let os = "linux";
     #[cfg(target_arch = "aarch64")]
     let arch = "aarch64";
     #[cfg(not(target_arch = "aarch64"))]
@@ -86,8 +88,10 @@ fn download_url(kind: RuntimeKind, version: &str) -> Result<(String, PathBuf), S
         RuntimeKind::Node => {
             let (os_name, arch_name) = if cfg!(target_os = "macos") {
                 ("darwin", if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" })
-            } else {
+            } else if cfg!(target_os = "windows") {
                 ("win", "x64")
+            } else {
+                ("linux", if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" })
             };
             let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
             let url = format!(
@@ -98,8 +102,10 @@ fn download_url(kind: RuntimeKind, version: &str) -> Result<(String, PathBuf), S
         RuntimeKind::Go => {
             let (os_name, arch_name) = if cfg!(target_os = "macos") {
                 ("darwin", if cfg!(target_arch = "aarch64") { "arm64" } else { "amd64" })
-            } else {
+            } else if cfg!(target_os = "windows") {
                 ("windows", "amd64")
+            } else {
+                ("linux", if cfg!(target_arch = "aarch64") { "arm64" } else { "amd64" })
             };
             let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
             let url = format!("https://go.dev/dl/go{version}.{os_name}-{arch_name}.{ext}");

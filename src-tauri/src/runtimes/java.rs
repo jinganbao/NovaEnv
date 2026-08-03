@@ -74,6 +74,10 @@ fn active_home_path() -> Option<String> {
     {
         std::env::var("JAVA_HOME").ok().filter(|p| Path::new(p).is_dir())
     }
+    #[cfg(target_os = "linux")]
+    {
+        std::env::var("JAVA_HOME").ok().filter(|p| Path::new(p).is_dir())
+    }
 }
 
 // ---------- macOS ----------

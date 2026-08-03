@@ -40,6 +40,10 @@ pub fn preview(version: &RuntimeVersion) -> Result<ActivationPreview, String> {
     {
         preview_windows(version)
     }
+    #[cfg(target_os = "linux")]
+    {
+        Err("当前平台暂不支持切换默认版本（支持 macOS / Windows）".to_string())
+    }
 }
 
 /// 执行切换（写入配置）
@@ -52,6 +56,10 @@ pub fn activate(version: &RuntimeVersion) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         activate_windows(version)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Err("当前平台暂不支持切换默认版本（支持 macOS / Windows）".to_string())
     }
 }
 

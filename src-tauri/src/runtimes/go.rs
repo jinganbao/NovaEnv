@@ -17,6 +17,8 @@ impl RuntimeAdapter for GoAdapter {
         RuntimeKind::Go
     }
 
+    // Linux 平台暂无候选目录扫描（CI 打包用），dirs 在 macOS/Windows 下需要可变
+    #[allow(unused_mut)]
     fn scan(&self) -> Vec<RuntimeVersion> {
         let mut dirs: Vec<(PathBuf, &str)> = Vec::new();
 
