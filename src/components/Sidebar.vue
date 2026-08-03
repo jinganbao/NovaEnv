@@ -30,9 +30,11 @@ function isKind(value: RuntimeKind | "settings"): value is RuntimeKind {
         <span class="nav-name">{{ RUNTIME_META[k].name }}</span>
         <span class="nav-count">{{ counts[k] }}</span>
       </button>
+    </nav>
 
+    <div class="sidebar-foot">
       <button
-        class="nav-item"
+        class="settings-btn"
         :class="{ active: selected === 'settings' }"
         @click="emit('select', 'settings')"
       >
@@ -40,10 +42,10 @@ function isKind(value: RuntimeKind | "settings"): value is RuntimeKind {
         <span class="nav-name">设置</span>
         <span v-if="!isKind(selected)" class="nav-dot"></span>
       </button>
-    </nav>
-    <div class="sidebar-foot">
-      <span class="foot-label">管理目录</span>
-      <code class="foot-path">~/.novaenv</code>
+      <div class="foot-info">
+        <span class="foot-label">管理目录</span>
+        <code class="foot-path">~/.novaenv</code>
+      </div>
     </div>
   </aside>
 </template>
@@ -120,18 +122,51 @@ function isKind(value: RuntimeKind | "settings"): value is RuntimeKind {
 .sidebar-foot {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+
+.settings-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-primary);
+  border-radius: 10px;
   padding: 10px 12px;
+  font-size: 14px;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.settings-btn:hover {
+  background: var(--bg-panel-hover);
+}
+
+.settings-btn.active {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  font-weight: 600;
+}
+
+.foot-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 12px;
 }
 
 .foot-label {
   font-size: 11px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .foot-path {
   font-size: 11px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   word-break: break-all;
 }
 </style>
