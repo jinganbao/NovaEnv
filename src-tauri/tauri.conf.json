@@ -36,5 +36,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE3QkUxMEI3OEZGNTg3ODgKUldTSWgvV1B0eEMrcHdBNU9OTjZUQTN4MTBRU1Y3WmRaYTg1UHNQSlc0K2xobXllUjhtTmdQM00K",
+      "endpoints": [
+        "https://github.com/jinganbao/NovaEnv/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
