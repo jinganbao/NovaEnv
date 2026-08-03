@@ -171,14 +171,37 @@ fn download_url(kind: RuntimeKind, version: &str) -> Result<(String, PathBuf), S
             Ok((url, downloads.join(format!("go{version}.{ext}"))))
         }
         RuntimeKind::Maven => {
-            // Apache Maven 官方归档（纯 Java 工具，无平台/架构区分）
+            // Apache Maven（纯 Java 工具，无平台/架构区分）。
+            // 官方源（dlcdn/archive）到国内网络极慢，优先国内镜像，全挂后回退官方。
             let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
-            let url = format!(
-                "https://archive.apache.org/dist/maven/maven-3/{version}/binaries/apache-maven-{version}-bin.{ext}"
-            );
-            Ok((url, downloads.join(format!("apache-maven-{version}-bin.{ext}"))))
+            let file = format!("apache-maven-{version}-bin.{ext}");
+            let candidates = [
+                format!("https://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3/{version}/binaries/{file}"),
+                format!("https://mirrors.aliyun.com/apache/maven/maven-3/{version}/binaries/{file}"),
+                format!("https://mirrors.huaweicloud.com/apache/maven/maven-3/{version}/binaries/{file}"),
+                format!("https://dlcdn.apache.org/maven/maven-3/{version}/binaries/{file}"),
+                format!("https://archive.apache.org/dist/maven/maven-3/{version}/binaries/{file}"),
+            ];
+            let url = candidates
+                .into_iter()
+                .find(|u| url_exists(u))
+                .ok_or("Maven 各下载源均不可用，请稍后重试")?;
+            Ok((url, downloads.join(file)))
         }
     }
+}
+
+/// HEAD 探测 URL 是否可用（镜像源选择用；跟随重定向，最终 200 视为可用）
+fn url_exists(url: &str) -> bool {
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(5))
+        .timeout_read(Duration::from_secs(8))
+        .build();
+    agent
+        .head(url)
+        .call()
+        .map(|r| r.status() == 200)
+        .unwrap_or(false)
 }
 
 // ---------- 下载 ----------
@@ -823,9 +846,11 @@ fn available_go() -> Result<Vec<AvailableVersion>, String> {    let json = http_
     Ok(versions)
 }
 
-/// Apache Maven 可用版本：解析 archive.apache.org 的 maven-3 目录页（完整历史版本）。
+/// Apache Maven 可用版本：解析镜像/官方的 maven-3 目录页（完整历史版本）。
+/// 版本列表同样优先国内镜像（响应快），失败回退官方 archive。
 fn available_maven() -> Result<Vec<AvailableVersion>, String> {
-    let html = http_get_text("https://archive.apache.org/dist/maven/maven-3/")?;
+    let html = http_get_text("https://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3/")
+        .or_else(|_| http_get_text("https://archive.apache.org/dist/maven/maven-3/"))?;
     let mut versions = Vec::new();
     // 目录条目形如：<a href="3.9.16/">3.9.16/</a>
     for cap in html
