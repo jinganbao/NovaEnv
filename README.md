@@ -138,9 +138,19 @@ pub trait RuntimeAdapter: Send + Sync {
 
 ### 首次发布前配置（一次性）
 
-1. **GitHub Secrets**（Settings → Secrets and variables → Actions）：
-   - `TAURI_SIGNING_PRIVATE_KEY`：updater 签名私钥内容（本地生成：`pnpm tauri signer generate --ci --password "" -w ~/.tauri/novaenv.key`，文件在 `~/.tauri/novaenv.key`，`cat` 后粘贴）
-2. 发布完成后应用内可检测更新（updater 端点指向 GitHub Releases `latest.json`）
+1. **生成签名密钥**（若未生成）：
+   ```bash
+   pnpm tauri signer generate --ci --password "" -w ~/.tauri/novaenv.key
+   ```
+   生成两个文件：`~/.tauri/novaenv.key`（私钥）与 `~/.tauri/novaenv.key.pub`（公钥）。
+   **注意区分**：两个文件都是 base64 编码，内容都以 `dW50cnVzdGVk...` 开头，配置时别拿错文件。
+
+2. **GitHub Secrets**（Settings → Secrets and variables → Actions）：
+   - `TAURI_SIGNING_PRIVATE_KEY`：**私钥文件内容**（`cat ~/.tauri/novaenv.key`，base64，开头为 `dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWdu...`）
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：私钥密码（`--ci --password ""` 生成的为空密码，填空字符串即可）
+   - ⚠️ 不要使用 `novaenv.key.pub`（公钥）——粘贴公钥会导致 CI 报 `Missing comment in secret key`
+
+3. 发布完成后应用内可检测更新（updater 端点指向 GitHub Releases `latest.json`）
 
 ## 主题
 
