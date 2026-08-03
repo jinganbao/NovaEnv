@@ -85,7 +85,7 @@ pnpm tauri build
 | --- | --- |
 | 扫描已安装运行时 | JDK（macOS `java_home -V` / Windows 注册表 + 常见目录）、Node（nvm / fnm / Homebrew / 官方）、Go（官方 / Homebrew / goenv） |
 | 展示 | 左侧边栏导航 + 顶部当前版本概览；版本卡片显示版本号 / 发行版 / 路径 / 默认标记 / NovaEnv 管理标记 |
-| 切换默认版本 | macOS 幂等更新 `~/.zshrc`（NovaEnv 管理块 + 自动备份 `~/.zshrc.novaenv.bak`）；Windows 通过 PowerShell 写入用户级环境变量（规避 setx PATH 截断） |
+| 切换默认版本 | macOS 幂等更新 `~/.zshrc`（NovaEnv 管理块 + 自动执行 source ~/.zshrc）；若检测到 **mise** 全局接管了该运行时，自动执行 `mise rm -g <tool>` 让位（仅全局配置，项目级 mise.toml 不受影响，可随时 `mise use -g` 收回）；Windows 通过 PowerShell 写入用户级环境变量（规避 setx PATH 截断） |
 | 变更预览 | 切换前展示将写入的配置行与备份路径，确认后执行 |
 | **安装新版本** | 右侧按大版本分组的可用版本列表（官方源：Java 为 **Azul Zulu**、Node 为 nodejs.org、Go 为 go.dev），LTS 标记；已安装版本直接在对应大版本行后标注（含默认/卸载操作），同一大版本有小版本更新时显示「升级到 x.y.z」按钮；流式下载 + 实时进度条（含无长度响应时的不定进度动画）+ 解压到 `~/.novaenv/installs/<kind>/<version>/` |
 | **卸载** | 仅可卸载 NovaEnv 管理安装的版本（删除 `~/.novaenv/installs` 下目录），默认版本需先切换 |
@@ -164,7 +164,7 @@ NovaMsg 同款设计语言：CSS 变量体系（`--bg-app/--bg-sider/--bg-panel/
 
 - [x] 项目骨架（前端 + 后端 + 图标 + 权限配置）
 - [x] 运行时扫描引擎（JDK / Node / Go，macOS + Windows）
-- [x] 切换默认环境引擎（预览 + 幂等写入 + 备份）
+- [x] 切换默认环境引擎（预览 + 幂等写入 + 自动 source + mise 让位）
 - [x] 前端界面（左侧边栏布局 + 概览条 + 版本卡片）
 - [x] 安装引擎（官方源版本列表 + 流式下载进度 + 解压安装到 ~/.novaenv）
 - [x] 卸载（仅 NovaEnv 管理的版本，默认版本保护）
