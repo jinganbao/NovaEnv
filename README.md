@@ -89,6 +89,7 @@ pnpm tauri build
 | 变更预览 | 切换前展示将写入的配置行与备份路径，确认后执行 |
 | **安装新版本** | 右侧按大版本分组的可用版本列表（官方源：Adoptium Temurin / nodejs.org / go.dev），LTS 标记；已安装版本直接在对应大版本行后标注（含默认/卸载操作），同一大版本有小版本更新时显示「升级到 x.y.z」按钮；流式下载 + 进度事件 + 解压到 `~/.novaenv/installs/<kind>/<version>/` |
 | **卸载** | 仅可卸载 NovaEnv 管理安装的版本（删除 `~/.novaenv/installs` 下目录），默认版本需先切换 |
+| **设置** | 左侧边栏 ⚙️ 入口：主题（跟随系统/暗色/亮色 + Nova 系列 6 色主题预设）、版本更新（检查/下载/安装/自动检查开关）、管理目录（路径/版本数/占用空间统计） |
 
 > 注意：切换后需重新打开终端（或 `source ~/.zshrc`）生效。
 > 安装下载可能较大（JDK ~200MB / Node ~25MB / Go ~70MB），首次安装请耐心等待。
@@ -143,7 +144,11 @@ pub trait RuntimeAdapter: Send + Sync {
 
 ## 主题
 
-NovaMsg 同款设计语言：CSS 变量体系（`--bg-app/--bg-sider/--bg-panel/--bg-input` + 双层边框），NovaEnv 品牌色 **#34D399**（emerald），默认暗色、跟随系统切换亮色。图标源文件 `src-tauri/icons/app-icon.svg`，改图标后执行 `pnpm tauri icon src-tauri/icons/app-icon.svg` 重新生成全套。
+NovaMsg 同款设计语言：CSS 变量体系（`--bg-app/--bg-sider/--bg-panel/--bg-input` + 双层边框），NovaEnv 品牌色 **#34D399**（emerald）。设置页支持：
+- 外观模式：跟随系统 / 暗色 / 亮色（持久化到 localStorage，`data-theme` 属性切换）
+- 主题色：Nova 系列 6 色预设（NovaEnv / NovaMsg / NovaDB / NovaFlow / NovaOps / NovaAI），动态注入品牌变量
+
+图标源文件 `src-tauri/icons/app-icon.svg`，改图标后执行 `pnpm tauri icon src-tauri/icons/app-icon.svg` 重新生成全套。
 
 ## 当前进度
 

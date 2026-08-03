@@ -4,10 +4,16 @@ import { RUNTIME_META } from "../types";
 
 defineProps<{
   kinds: RuntimeKind[];
-  selected: RuntimeKind;
+  selected: RuntimeKind | "settings";
   counts: Record<RuntimeKind, number>;
 }>();
-const emit = defineEmits<{ (e: "select", kind: RuntimeKind): void }>();
+const emit = defineEmits<{
+  (e: "select", kind: RuntimeKind | "settings"): void;
+}>();
+
+function isKind(value: RuntimeKind | "settings"): value is RuntimeKind {
+  return value !== "settings";
+}
 </script>
 
 <template>
@@ -23,6 +29,16 @@ const emit = defineEmits<{ (e: "select", kind: RuntimeKind): void }>();
         <span class="nav-icon">{{ RUNTIME_META[k].icon }}</span>
         <span class="nav-name">{{ RUNTIME_META[k].name }}</span>
         <span class="nav-count">{{ counts[k] }}</span>
+      </button>
+
+      <button
+        class="nav-item"
+        :class="{ active: selected === 'settings' }"
+        @click="emit('select', 'settings')"
+      >
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-name">设置</span>
+        <span v-if="!isKind(selected)" class="nav-dot"></span>
       </button>
     </nav>
     <div class="sidebar-foot">
@@ -92,6 +108,13 @@ const emit = defineEmits<{ (e: "select", kind: RuntimeKind): void }>();
   padding: 0 8px;
   min-width: 24px;
   text-align: center;
+}
+
+.nav-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand);
 }
 
 .sidebar-foot {

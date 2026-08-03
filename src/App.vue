@@ -14,17 +14,25 @@ import type {
   RuntimeVersion,
 } from "./types";
 import { RUNTIME_META } from "./types";
+import { useAppUpdate } from "./composables/useAppUpdate";
+import { useConfig } from "./composables/useConfig";
+import { useTheme } from "./composables/useTheme";
 import ActivationModal from "./components/ActivationModal.vue";
 import RuntimeDetail from "./components/RuntimeDetail.vue";
+import SettingsView from "./components/SettingsView.vue";
 import Sidebar from "./components/Sidebar.vue";
 import UninstallModal from "./components/UninstallModal.vue";
 
 const kinds: RuntimeKind[] = ["java", "node", "go"];
 
+// 配置与主题（启动即应用持久化的主题设置）
+const config = useConfig();
+useTheme(config);
+
 const loading = ref(false);
 const error = ref<string | null>(null);
 const payload = ref<RuntimesPayload | null>(null);
-const selected = ref<RuntimeKind>("java");
+const selected = ref<RuntimeKind | "settings">("java");
 
 // 切换默认流程
 const pendingVersion = ref<RuntimeVersion | null>(null);
@@ -36,6 +44,12 @@ const uninstallTarget = ref<RuntimeVersion | null>(null);
 const uninstalling = ref(false);
 
 const feedback = ref<{ ok: boolean; text: string } | null>(null);
+
+// 启动时静默检查更新
+useAppUpdate(config, {
+  error: (m) => (feedback.value = { ok: false, text: m }),
+  success: () => {},
+}).autoCheckOnStartup();
 
 const counts = computed<Record<RuntimeKind, number>>(() => {
   const c: Record<RuntimeKind, number> = { java: 0, node: 0, go: 0 };
@@ -173,16 +187,18 @@ onMounted(() => {
       />
 
       <main class="content">
-        <div v-if="!payload && loading" class="placeholder">正在扫描本机开发环境…</div>
-        <div v-else-if="payload">
-          <RuntimeDetail
-            :kind="selected"
-            :versions="versionsOf(selected)"
-            @activate="openActivation"
-            @uninstall="openUninstall"
-            @refresh="refresh"
-          />
+        <div v-if="!payload && loading && selected !== 'settings'" class="placeholder">
+          正在扫描本机开发环境…
         </div>
+        <SettingsView v-else-if="selected === 'settings'" />
+        <RuntimeDetail
+          v-else-if="payload"
+          :kind="selected"
+          :versions="versionsOf(selected)"
+          @activate="openActivation"
+          @uninstall="openUninstall"
+          @refresh="refresh"
+        />
       </main>
     </div>
 

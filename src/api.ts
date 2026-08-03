@@ -4,6 +4,7 @@ import type {
   ActivationPreview,
   AvailableVersionGroup,
   InstallProgress,
+  ManageInfo,
   RuntimesPayload,
   RuntimeKind,
   RuntimeVersion,
@@ -54,4 +55,9 @@ export function onInstallProgress(
   return listen<InstallProgress>("install-progress", (event) =>
     handler(event.payload),
   );
+}
+
+/** 获取管理目录信息（路径 / 版本数 / 占用空间） */
+export function getManageInfo(): Promise<ManageInfo> {
+  return invoke("get_manage_info");
 }

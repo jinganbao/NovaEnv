@@ -37,6 +37,20 @@ export interface InstallProgress {
   message: string;
 }
 
+/** 单个运行时在管理目录中的已安装版本 */
+export interface ManagedRuntimeInfo {
+  kind: RuntimeKind;
+  versions: string[];
+}
+
+/** 管理目录信息 */
+export interface ManageInfo {
+  path: string;
+  versionCount: number;
+  sizeBytes: number;
+  runtimes: ManagedRuntimeInfo[];
+}
+
 export interface RuntimeOverview {
   java: string | null;
   node: string | null;

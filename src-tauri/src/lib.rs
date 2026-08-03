@@ -8,7 +8,10 @@ mod platform;
 mod runtimes;
 
 use activation::ActivationPreview;
-use models::{AvailableVersionGroup, InstallRequest, RuntimesPayload, RuntimeKind, RuntimeVersion};
+use models::{
+    AvailableVersionGroup, InstallRequest, ManageInfo, RuntimesPayload, RuntimeKind,
+    RuntimeVersion,
+};
 
 /// 扫描全部运行时（JDK / Node / Go），返回概览 + 完整版本列表。
 #[tauri::command]
@@ -54,16 +57,25 @@ fn uninstall_version(version: RuntimeVersion) -> Result<(), String> {
     installer::uninstall(&version)
 }
 
+/// 获取管理目录信息（路径 / 版本数 / 占用空间）。
+#[tauri::command]
+fn get_manage_info() -> ManageInfo {
+    installer::manage_info()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             list_runtimes,
             preview_activation,
             activate,
             available_versions,
             install_version,
-            uninstall_version
+            uninstall_version,
+            get_manage_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

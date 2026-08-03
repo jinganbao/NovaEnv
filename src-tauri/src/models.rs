@@ -114,3 +114,26 @@ pub struct RuntimesPayload {
     pub overview: RuntimeOverview,
     pub versions: Vec<RuntimeVersion>,
 }
+
+/// 单个运行时在管理目录中的已安装版本
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedRuntimeInfo {
+    pub kind: RuntimeKind,
+    /// 已安装的版本号（排序后）
+    pub versions: Vec<String>,
+}
+
+/// 管理目录信息（设置页展示）
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManageInfo {
+    /// 管理目录路径（~/.novaenv/installs）
+    pub path: String,
+    /// 已管理版本总数
+    pub version_count: usize,
+    /// 占用磁盘空间（字节）
+    pub size_bytes: u64,
+    /// 各运行时的管理版本
+    pub runtimes: Vec<ManagedRuntimeInfo>,
+}

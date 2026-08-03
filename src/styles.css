@@ -40,7 +40,8 @@
 }
 
 @media (prefers-color-scheme: light) {
-  :root {
+  /* 跟随系统：未显式指定暗色时使用亮色 */
+  :root:not([data-theme="dark"]) {
     /* 亮色主题 */
     --bg-app: #f7f9fc;
     --bg-sider: #eef3f7;
@@ -66,6 +67,38 @@
 
     color-scheme: light;
   }
+}
+
+/* 手动切换亮色（设置页选择） */
+:root[data-theme="light"] {
+  --bg-app: #f7f9fc;
+  --bg-sider: #eef3f7;
+  --bg-panel: #ffffff;
+  --bg-panel-hover: #eaf0f7;
+  --bg-input: #f1f5f9;
+  --border-subtle: #d8e0ea;
+  --border-strong: #bcc8d6;
+  --text-primary: #17202a;
+  --text-secondary: #5d6978;
+  --text-muted: #7b8797;
+  --brand: #059669;
+  --brand-hover: #047857;
+  --brand-active: #065f46;
+  --brand-soft: rgba(5, 150, 105, 0.12);
+  --focus: #0284c7;
+  --danger: #dc2626;
+  --warning: #b7791f;
+  --success: #15803d;
+  --danger-soft: rgba(220, 38, 38, 0.08);
+  --success-soft: rgba(21, 128, 61, 0.08);
+  --shadow-strong: rgba(15, 23, 42, 0.16);
+
+  color-scheme: light;
+}
+
+/* 手动切换暗色（默认即暗色，显式声明以覆盖跟随系统） */
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 html,

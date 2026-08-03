@@ -305,6 +305,63 @@ pub fn uninstall(version: &RuntimeVersion) -> Result<(), String> {
     Ok(())
 }
 
+// ---------- 管理目录信息 ----------
+
+/// 收集管理目录信息：路径 / 已管理版本数 / 占用空间
+pub fn manage_info() -> crate::models::ManageInfo {
+    use crate::models::{ManagedRuntimeInfo, ManageInfo};
+
+    let installs = installs_dir();
+    let mut runtimes = Vec::new();
+    let mut version_count = 0usize;
+    let mut size_bytes = 0u64;
+
+    for (kind, dir_name) in [
+        (RuntimeKind::Java, "java"),
+        (RuntimeKind::Node, "node"),
+        (RuntimeKind::Go, "go"),
+    ] {
+        let dir = installs.join(dir_name);
+        let mut versions = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    if let Some(name) = entry.file_name().to_str() {
+                        versions.push(name.to_string());
+                        size_bytes += dir_size(&entry.path());
+                    }
+                }
+            }
+        }
+        versions.sort();
+        version_count += versions.len();
+        runtimes.push(ManagedRuntimeInfo { kind, versions });
+    }
+
+    ManageInfo {
+        path: installs.to_string_lossy().into_owned(),
+        version_count,
+        size_bytes,
+        runtimes,
+    }
+}
+
+/// 递归计算目录占用字节数
+fn dir_size(path: &Path) -> u64 {
+    let mut total = 0u64;
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                total += dir_size(&p);
+            } else if let Ok(meta) = p.metadata() {
+                total += meta.len();
+            }
+        }
+    }
+    total
+}
+
 // ---------- 可用版本列表 ----------
 
 /// 可用版本缓存条目
