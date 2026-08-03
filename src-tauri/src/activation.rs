@@ -111,7 +111,10 @@ fn preview_macos(version: &RuntimeVersion) -> Result<ActivationPreview, String> 
         .map(|o| o.status.success())
         .unwrap_or(false);
     let note = if has_mise {
-        "切换后自动执行 source ~/.zshrc，并同步 mise 全局配置。".to_string()
+        format!(
+            "切换后自动执行 source ~/.zshrc，并移除 mise 对 {} 的全局接管（由 NovaEnv 管理）。",
+            version.kind.display_name()
+        )
     } else {
         "切换后自动执行 source ~/.zshrc 刷新 shell 配置。".to_string()
     };
@@ -158,17 +161,18 @@ fn activate_macos(version: &RuntimeVersion) -> Result<(), String> {
         .args(["-c", "source ~/.zshrc"])
         .status();
 
-    // 5) 同步 mise 全局配置（若用户使用 mise 管理该运行时，
+    // 5) 移除 mise 对该运行时的全局接管（若用户使用 mise 管理该运行时，
     //    否则 mise activate 会把旧版本插到 PATH 最前，覆盖本次切换）
-    sync_mise(version.kind, &version.path);
+    release_mise(version.kind);
 
     Ok(())
 }
 
-/// 同步 mise 全局配置：`mise use -g <tool>@path:<安装路径>`
-/// 让 mise 的 PATH 注入指向 NovaEnv 管理的版本（mise 不可用时静默跳过）。
+/// 移除 mise 全局配置中对指定运行时的接管：`mise rm -g <tool>`
+/// 让 .zshrc 中 NovaEnv 的 PATH 前置生效（mise 不可用时静默跳过）。
+/// 仅移除全局配置，不影响项目级 mise.toml；用户可随时 `mise use -g` 重新接管。
 #[cfg(target_os = "macos")]
-fn sync_mise(kind: RuntimeKind, path: &str) {
+fn release_mise(kind: RuntimeKind) {
     let tool = match kind {
         RuntimeKind::Java => "java",
         RuntimeKind::Node => "node",
@@ -183,7 +187,7 @@ fn sync_mise(kind: RuntimeKind, path: &str) {
         return;
     }
     let _ = std::process::Command::new("mise")
-        .args(["use", "-g", &format!("{tool}@path:{path}")])
+        .args(["rm", "-g", tool])
         .output();
 }
 
