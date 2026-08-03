@@ -87,7 +87,7 @@ pnpm tauri build
 | 展示 | 左侧边栏导航 + 顶部当前版本概览；版本卡片显示版本号 / 发行版 / 路径 / 默认标记 / NovaEnv 管理标记 |
 | 切换默认版本 | macOS 幂等更新 `~/.zshrc`（NovaEnv 管理块 + 自动执行 source ~/.zshrc）；若检测到 **mise** 全局接管了该运行时，自动执行 `mise rm -g <tool>` 让位（仅全局配置，项目级 mise.toml 不受影响，可随时 `mise use -g` 收回）；Windows 通过 PowerShell 写入用户级环境变量（规避 setx PATH 截断） |
 | 变更预览 | 切换前展示将写入的配置行与备份路径，确认后执行 |
-| **安装新版本** | 右侧按大版本分组的可用版本列表（官方源：Java 为 **Azul Zulu**、Node 为 nodejs.org、Go 为 go.dev），LTS 标记；已安装版本直接在对应大版本行后标注（含默认/卸载操作），同一大版本有小版本更新时显示「升级到 x.y.z」按钮；流式下载 + 实时进度条（含无长度响应时的不定进度动画）+ 解压到 `~/.novaenv/installs/<kind>/<version>/` |
+| **安装新版本** | 右侧按大版本分组的可用版本列表（官方源：Java 为 **Azul Zulu**、Node 为 nodejs.org、Go 为 go.dev、**Maven 为 archive.apache.org**），LTS 标记；已安装版本直接在对应大版本行后标注（含默认/卸载操作），同一大版本有小版本更新时显示「升级到 x.y.z」按钮；流式下载 + 实时进度条（含无长度响应时的不定进度动画）+ 解压到 `~/.novaenv/installs/<kind>/<version>/` |
 | **卸载** | 仅可卸载 NovaEnv 管理安装的版本（删除 `~/.novaenv/installs` 下目录），默认版本需先切换 |
 | **设置** | 左侧边栏 ⚙️ 入口：主题（跟随系统/暗色/亮色 + Nova 系列 6 色主题预设）、版本更新（检查/下载/安装/自动检查开关）、管理目录（路径/版本数/占用空间统计） |
 

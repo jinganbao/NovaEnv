@@ -21,7 +21,7 @@ pub fn java_home_listing() -> Option<String> {
 pub fn active_config_paths() -> Vec<String> {
     const BLOCK_START: &str = "# >>> NovaEnv managed >>>";
     const BLOCK_END: &str = "# <<< NovaEnv managed <<<";
-    const VARS: [&str; 3] = ["JAVA_HOME", "NODE_HOME", "GOROOT"];
+    const VARS: [&str; 4] = ["JAVA_HOME", "NODE_HOME", "GOROOT", "MAVEN_HOME"];
 
     let Some(home) = super::home_dir() else {
         return Vec::new();

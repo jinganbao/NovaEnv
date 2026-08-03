@@ -23,7 +23,7 @@ import SettingsView from "./components/SettingsView.vue";
 import Sidebar from "./components/Sidebar.vue";
 import UninstallModal from "./components/UninstallModal.vue";
 
-const kinds: RuntimeKind[] = ["java", "node", "go"];
+const kinds: RuntimeKind[] = ["java", "node", "go", "maven"];
 
 // 配置与主题（启动即应用持久化的主题设置）
 const config = useConfig();
@@ -52,7 +52,7 @@ useAppUpdate(config, {
 }).autoCheckOnStartup();
 
 const counts = computed<Record<RuntimeKind, number>>(() => {
-  const c: Record<RuntimeKind, number> = { java: 0, node: 0, go: 0 };
+  const c: Record<RuntimeKind, number> = { java: 0, node: 0, go: 0, maven: 0 };
   for (const v of payload.value?.versions ?? []) c[v.kind]++;
   return c;
 });

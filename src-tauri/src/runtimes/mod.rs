@@ -8,6 +8,7 @@
 
 pub mod go;
 pub mod java;
+pub mod maven;
 pub mod node;
 
 use crate::adapter::RuntimeAdapter;
@@ -19,6 +20,7 @@ pub fn all() -> Vec<Box<dyn RuntimeAdapter>> {
         Box::new(java::JavaAdapter),
         Box::new(node::NodeAdapter),
         Box::new(go::GoAdapter),
+        Box::new(maven::MavenAdapter),
     ]
 }
 
@@ -43,6 +45,7 @@ fn overview() -> RuntimeOverview {
             RuntimeKind::Java => overview.java = active,
             RuntimeKind::Node => overview.node = active,
             RuntimeKind::Go => overview.go = active,
+            RuntimeKind::Maven => overview.maven = active,
         }
     }
     overview.java_home = std::env::var("JAVA_HOME").ok();

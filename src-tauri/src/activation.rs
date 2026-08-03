@@ -87,6 +87,10 @@ fn shell_lines(version: &RuntimeVersion) -> Vec<String> {
             format!("export GOROOT=\"{}\"", version.path),
             "export PATH=\"$GOROOT/bin:$PATH\"".to_string(),
         ],
+        RuntimeKind::Maven => vec![
+            format!("export MAVEN_HOME=\"{}\"", version.path),
+            "export PATH=\"$MAVEN_HOME/bin:$PATH\"".to_string(),
+        ],
     }
 }
 

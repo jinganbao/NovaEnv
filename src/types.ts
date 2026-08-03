@@ -1,6 +1,6 @@
 // 与 Rust 后端 models.rs 对应的类型定义（serde camelCase 契约）
 
-export type RuntimeKind = "java" | "node" | "go";
+export type RuntimeKind = "java" | "node" | "go" | "maven";
 
 export interface RuntimeVersion {
   kind: RuntimeKind;
@@ -63,6 +63,7 @@ export interface RuntimeOverview {
   java: string | null;
   node: string | null;
   go: string | null;
+  maven: string | null;
   javaHome: string | null;
 }
 
@@ -90,4 +91,5 @@ export const RUNTIME_META: Record<
   java: { name: "Java", icon: "☕", desc: "JDK 运行时" },
   node: { name: "Node.js", icon: "🟢", desc: "JavaScript 运行时" },
   go: { name: "Go", icon: "🐹", desc: "Go 编程语言" },
+  maven: { name: "Maven", icon: "📦", desc: "Java 构建工具" },
 };

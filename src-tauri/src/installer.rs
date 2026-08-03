@@ -49,6 +49,7 @@ fn kind_dir(kind: RuntimeKind) -> &'static str {
         RuntimeKind::Java => "java",
         RuntimeKind::Node => "node",
         RuntimeKind::Go => "go",
+        RuntimeKind::Maven => "maven",
     }
 }
 
@@ -168,6 +169,14 @@ fn download_url(kind: RuntimeKind, version: &str) -> Result<(String, PathBuf), S
             let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
             let url = format!("https://go.dev/dl/go{version}.{os_name}-{arch_name}.{ext}");
             Ok((url, downloads.join(format!("go{version}.{ext}"))))
+        }
+        RuntimeKind::Maven => {
+            // Apache Maven 官方归档（纯 Java 工具，无平台/架构区分）
+            let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
+            let url = format!(
+                "https://archive.apache.org/dist/maven/maven-3/{version}/binaries/apache-maven-{version}-bin.{ext}"
+            );
+            Ok((url, downloads.join(format!("apache-maven-{version}-bin.{ext}"))))
         }
     }
 }
@@ -311,6 +320,11 @@ fn locate_extracted(
                 return Err("Go 归档结构异常，请重试".to_string());
             }
             Ok((requested.to_string(), go_dir))
+        }
+        RuntimeKind::Maven => {
+            // apache-maven-3.9.16/ 顶层目录（与 Node 同构）
+            let sub = first_subdir(tmp).ok_or("解压结果为空，请重试")?;
+            Ok((requested.to_string(), sub))
         }
     }
 }
@@ -469,6 +483,7 @@ pub fn manage_info() -> crate::models::ManageInfo {
         (RuntimeKind::Java, "java"),
         (RuntimeKind::Node, "node"),
         (RuntimeKind::Go, "go"),
+        (RuntimeKind::Maven, "maven"),
     ] {
         let dir = installs.join(dir_name);
         let mut versions = Vec::new();
@@ -557,6 +572,7 @@ pub fn available_versions(
         RuntimeKind::Java => available_java()?,
         RuntimeKind::Node => available_node()?,
         RuntimeKind::Go => available_go()?,
+        RuntimeKind::Maven => available_maven()?,
     };
     let groups = group_versions(kind, flat);
 
@@ -591,6 +607,7 @@ fn kind_name(kind: RuntimeKind) -> &'static str {
         RuntimeKind::Java => "java",
         RuntimeKind::Node => "node",
         RuntimeKind::Go => "go",
+        RuntimeKind::Maven => "maven",
     }
 }
 
@@ -699,6 +716,16 @@ fn http_get_json(url: &str) -> Result<serde_json::Value, String> {
     serde_json::from_str(&body).map_err(|e| format!("解析版本源失败: {e}"))
 }
 
+/// GET 文本内容（用于解析 HTML 目录页，如 Apache Maven 版本列表）
+fn http_get_text(url: &str) -> Result<String, String> {
+    ureq::get(url)
+        .timeout(Duration::from_secs(12))
+        .call()
+        .map_err(|e| format!("请求版本源失败（{url}）: {e}"))?
+        .into_string()
+        .map_err(|e| format!("读取版本源响应失败: {e}"))
+}
+
 /// Azul Zulu：LTS（8/11/17/21/25）+ 最新非 LTS，
 /// 逐 major 并行请求 packages API 获取标准 JDK 版本列表
 fn available_java() -> Result<Vec<AvailableVersion>, String> {
@@ -773,8 +800,7 @@ fn available_node() -> Result<Vec<AvailableVersion>, String> {
 }
 
 /// go.dev：dl/?mode=json，全部 stable 版本
-fn available_go() -> Result<Vec<AvailableVersion>, String> {
-    let json = http_get_json("https://go.dev/dl/?mode=json")?;
+fn available_go() -> Result<Vec<AvailableVersion>, String> {    let json = http_get_json("https://go.dev/dl/?mode=json")?;
     let arr = json.as_array().ok_or("go.dev 响应格式异常")?;
     let mut versions = Vec::new();
     for entry in arr.iter() {
@@ -793,6 +819,57 @@ fn available_go() -> Result<Vec<AvailableVersion>, String> {
     }
     if versions.is_empty() {
         return Err("go.dev 未返回可用版本".to_string());
+    }
+    Ok(versions)
+}
+
+/// Apache Maven 可用版本：解析 archive.apache.org 的 maven-3 目录页（完整历史版本）。
+fn available_maven() -> Result<Vec<AvailableVersion>, String> {
+    let html = http_get_text("https://archive.apache.org/dist/maven/maven-3/")?;
+    let mut versions = Vec::new();
+    // 目录条目形如：<a href="3.9.16/">3.9.16/</a>
+    for cap in html
+        .match_indices("href=\"")
+        .filter_map(|(i, _)| {
+            let rest = &html[i + 6..];
+            let end = rest.find('"')?;
+            let href = &rest[..end];
+            href.strip_suffix('/').map(|d| d.to_string())
+        })
+    {
+        // 仅保留纯版本号目录（形如 3.9.16 / 3.0.4）
+        let version = cap;
+        let mut chars = version.chars();
+        let mut ok = true;
+        let mut dots = 0;
+        let mut digits = 0;
+        for c in chars.by_ref() {
+            if c.is_ascii_digit() {
+                digits += 1;
+            } else if c == '.' {
+                dots += 1;
+            } else {
+                ok = false;
+                break;
+            }
+        }
+        if !ok || dots == 0 || digits == 0 {
+            continue;
+        }
+        // 过滤异常目录（如 "3.0-alpha" 会被上面规则排除；"3.9.16/" 正常）
+        versions.push(AvailableVersion {
+            version,
+            is_lts: false,
+        });
+    }
+    // 版本号倒序（最新在前）
+    versions.sort_by(|a, b| {
+        let va: Vec<u32> = a.version.split('.').filter_map(|s| s.parse().ok()).collect();
+        let vb: Vec<u32> = b.version.split('.').filter_map(|s| s.parse().ok()).collect();
+        vb.cmp(&va)
+    });
+    if versions.is_empty() {
+        return Err("Apache Maven 目录页未解析到可用版本".to_string());
     }
     Ok(versions)
 }
