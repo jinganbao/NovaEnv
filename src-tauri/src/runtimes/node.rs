@@ -30,7 +30,6 @@ impl RuntimeAdapter for NodeAdapter {
             dirs.extend(candidate_dirs_windows());
         }
 
-        let active = self.active_version();
         let mut seen = Vec::new();
         let mut versions = Vec::new();
 
@@ -49,13 +48,12 @@ impl RuntimeAdapter for NodeAdapter {
                 infer_from_dir_name(&dir)
             };
             if let Some(version) = version {
-                let is_default = active.as_deref() == Some(version.as_str());
                 versions.push(RuntimeVersion {
                     kind: RuntimeKind::Node,
                     version,
                     vendor: vendor.to_string(),
                     path: dir.to_string_lossy().into_owned(),
-                    is_default,
+                    is_default: crate::platform::is_active_dir(&dir),
                     managed: crate::installer::is_managed(&dir.to_string_lossy()),
                 });
             }

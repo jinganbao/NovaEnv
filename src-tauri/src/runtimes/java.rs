@@ -32,15 +32,13 @@ impl RuntimeAdapter for JavaAdapter {
         homes.sort_by(|a, b| a.0.cmp(&b.0));
         homes.dedup_by(|a, b| a.0 == b.0);
 
-        let active_home = active_home_path();
-
         homes
             .into_iter()
             .map(|(path, version, vendor)| RuntimeVersion {
                 kind: RuntimeKind::Java,
                 version,
                 vendor,
-                is_default: active_home.as_deref() == Some(path.as_str()),
+                is_default: crate::platform::is_active_dir(std::path::Path::new(&path)),
                 managed: crate::installer::is_managed(&path),
                 path,
             })
@@ -61,22 +59,6 @@ impl RuntimeAdapter for JavaAdapter {
         } else {
             Some(version.to_string())
         }
-    }
-}
-
-/// 当前生效的 JDK 路径（macOS 用 java_home，Windows 用 JAVA_HOME）
-fn active_home_path() -> Option<String> {
-    #[cfg(target_os = "macos")]
-    {
-        platform::macos::default_java_home()
-    }
-    #[cfg(target_os = "windows")]
-    {
-        std::env::var("JAVA_HOME").ok().filter(|p| Path::new(p).is_dir())
-    }
-    #[cfg(target_os = "linux")]
-    {
-        std::env::var("JAVA_HOME").ok().filter(|p| Path::new(p).is_dir())
     }
 }
 

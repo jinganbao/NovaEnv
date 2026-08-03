@@ -46,3 +46,28 @@ pub fn run_capture(program: &str, args: &[&str]) -> Option<String> {
     None
 }
 
+/// 当前激活配置中的运行时路径列表：
+/// - macOS：解析 ~/.zshrc 中 NovaEnv 管理块（JAVA_HOME / NODE_HOME / GOROOT）
+/// - Windows：读取用户级环境变量
+pub fn active_config_paths() -> Vec<String> {
+    #[cfg(target_os = "macos")]
+    {
+        return macos::active_config_paths();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return windows::active_config_paths();
+    }
+    #[allow(unreachable_code)]
+    Vec::new()
+}
+
+/// 判断目录是否被激活配置指向（设置默认后即时生效，不依赖进程 PATH）
+pub fn is_active_dir(dir: &Path) -> bool {
+    let dir = dir.to_path_buf();
+    active_config_paths().iter().any(|p| {
+        let pp = PathBuf::from(p);
+        dir == pp || dir == pp.parent().unwrap_or(&pp)
+    })
+}
+

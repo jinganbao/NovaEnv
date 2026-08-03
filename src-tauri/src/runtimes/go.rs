@@ -31,7 +31,6 @@ impl RuntimeAdapter for GoAdapter {
             dirs.extend(candidate_dirs_windows());
         }
 
-        let active_root = active_goroot();
         let mut seen = Vec::new();
         let mut versions = Vec::new();
 
@@ -48,7 +47,7 @@ impl RuntimeAdapter for GoAdapter {
                 kind: RuntimeKind::Go,
                 version,
                 vendor: vendor.to_string(),
-                is_default: active_root.as_deref() == Some(dir.to_str().unwrap_or("")),
+                is_default: crate::platform::is_active_dir(&dir),
                 managed: crate::installer::is_managed(&dir.to_string_lossy()),
                 path: dir.to_string_lossy().into_owned(),
             });
@@ -63,11 +62,6 @@ impl RuntimeAdapter for GoAdapter {
         let token = out.split_whitespace().nth(2)?;
         token.strip_prefix("go").map(|s| s.to_string())
     }
-}
-
-/// 当前 GOROOT（`go env GOROOT`，仅当 go 在 PATH 上可用）
-fn active_goroot() -> Option<String> {
-    platform::run_capture("go", &["env", "GOROOT"])
 }
 
 /// 读取 GOROOT/VERSION 文件（内容形如 `go1.23.4`），返回 `1.23.4`

@@ -42,3 +42,14 @@ pub fn java_homes_from_registry() -> Vec<(String, String, String)> {
     }
     result
 }
+
+/// 读取用户级环境变量中的激活路径
+/// （NovaEnv 通过 `[Environment]::SetEnvironmentVariable(name, value, 'User')` 写入）。
+/// 进程环境为系统级 + 用户级合并视图，重启应用后即可读到。
+pub fn active_config_paths() -> Vec<String> {
+    ["JAVA_HOME", "NODE_HOME", "GOROOT"]
+        .iter()
+        .filter_map(|v| std::env::var(v).ok())
+        .filter(|p| !p.is_empty())
+        .collect()
+}
