@@ -78,12 +78,14 @@ fn download_url(kind: RuntimeKind, version: &str) -> Result<(String, PathBuf), S
 
     match kind {
         RuntimeKind::Java => {
-            // Adoptium Temurin：latest/<feature>/ga/<os>/<arch>/jdk/hotspot/normal/eclipse
+            // Adoptium Temurin：binary/latest/<feature>/ga/...
+            // 只接受大版本号（如 17、21），具体小版本（17.0.20）需提取 feature 段
+            let feature = version.split('.').next().unwrap_or(version);
             let url = format!(
-                "https://api.adoptium.net/v3/binary/latest/{version}/ga/{os}/{arch}/jdk/hotspot/normal/eclipse"
+                "https://api.adoptium.net/v3/binary/latest/{feature}/ga/{os}/{arch}/jdk/hotspot/normal/eclipse"
             );
             let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
-            Ok((url, downloads.join(format!("temurin-{version}.{ext}"))))
+            Ok((url, downloads.join(format!("temurin-{feature}.{ext}"))))
         }
         RuntimeKind::Node => {
             let (os_name, arch_name) = if cfg!(target_os = "macos") {
