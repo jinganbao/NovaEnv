@@ -384,69 +384,91 @@ onUnmounted(() => unlisten?.());
       </div>
     </div>
 
-    <!-- 已安装版本列表（多版本支持，紧凑行 + 更多操作） -->
+    <!-- 已安装版本（表格形式） -->
     <div v-if="service.installed" class="svc-card">
       <div class="installed-head">
         <span class="installed-title">已安装版本</span>
         <span class="svc-muted">{{ service.versions.length }} 个</span>
       </div>
-      <div v-for="v in service.versions" :key="v.version" class="svc-version-row">
-        <span
-          class="run-dot"
-          :class="runningOf(v.version) ? 'run-dot-on' : 'run-dot-off'"
-        ></span>
-        <span class="svc-val version">{{ v.version }}</span>
-        <span class="svc-muted">端口 {{ v.port }}</span>
-        <span v-if="v.autostart" class="badge badge-brand badge-tiny">自启</span>
-
-        <div class="svc-actions">
-          <button
-            v-if="!runningOf(v.version)"
-            class="btn btn-primary btn-sm"
-            :disabled="busy"
-            @click="doStart(v.version)"
-          >
-            {{ acting?.version === v.version && acting?.action === 'start' ? '启动中…' : '启动' }}
-          </button>
-          <template v-else>
-            <button class="btn btn-sm" :disabled="busy" @click="doStop(v.version)">
+      <div class="ver-table">
+        <div class="ver-table-head">
+          <span class="col-ver">版本</span>
+          <span class="col-port">端口</span>
+          <span class="col-status">状态</span>
+          <span class="col-auto">自启</span>
+          <span class="col-ops">操作</span>
+        </div>
+        <div
+          v-for="v in service.versions"
+          :key="v.version"
+          class="ver-table-row"
+          :class="{ 'row-expanded': expandedVer === v.version }"
+        >
+          <span class="col-ver ver-name">{{ v.version }}</span>
+          <span class="col-port">{{ v.port }}</span>
+          <span class="col-status">
+            <span
+              class="run-dot"
+              :class="runningOf(v.version) ? 'run-dot-on' : 'run-dot-off'"
+            ></span>
+            {{ runningOf(v.version) ? "运行中" : "已停止" }}
+          </span>
+          <span class="col-auto">
+            <span v-if="v.autostart" class="badge badge-brand badge-tiny">自启</span>
+            <span v-else class="svc-muted">—</span>
+          </span>
+          <span class="col-ops">
+            <button
+              v-if="!runningOf(v.version)"
+              class="btn btn-primary btn-sm"
+              :disabled="busy"
+              @click="doStart(v.version)"
+            >
+              {{ acting?.version === v.version && acting?.action === 'start' ? '启动中…' : '启动' }}
+            </button>
+            <button
+              v-else
+              class="btn btn-sm"
+              :disabled="busy"
+              @click="doStop(v.version)"
+            >
               {{ acting?.version === v.version && acting?.action === 'stop' ? '停止中…' : '停止' }}
             </button>
-          </template>
-          <button
-            class="btn btn-sm btn-more"
-            :class="{ open: expandedVer === v.version }"
-            :disabled="busy"
-            @click="expandedVer = expandedVer === v.version ? '' : v.version"
-          >
-            {{ expandedVer === v.version ? "收起" : "更多" }}
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path :d="expandedVer === v.version ? 'M18 15l-6-6-6 6' : 'M6 9l6 6 6-6'" />
-            </svg>
-          </button>
-        </div>
+            <button
+              class="btn btn-sm btn-more"
+              :class="{ open: expandedVer === v.version }"
+              :disabled="busy"
+              @click="expandedVer = expandedVer === v.version ? '' : v.version"
+            >
+              更多
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path :d="expandedVer === v.version ? 'M18 15l-6-6-6 6' : 'M6 9l6 6 6-6'" />
+              </svg>
+            </button>
+          </span>
 
-        <!-- 更多操作（展开） -->
-        <div v-if="expandedVer === v.version" class="ver-more">
-          <button class="btn btn-sm" :disabled="busy" @click="doRestart(v.version)">
-            {{ acting?.version === v.version && acting?.action === 'restart' ? '重启中…' : '重启' }}
-          </button>
-          <button class="btn btn-sm" :disabled="busy" @click="openEdit(v.version, v.port)">
-            配置
-          </button>
-          <button class="btn btn-sm" :disabled="busy" @click="openLog(v.version)">
-            日志
-          </button>
-          <button
-            class="btn btn-sm"
-            :disabled="busy"
-            @click="toggleAutostart(v.version, v.autostart)"
-          >
-            {{ v.autostart ? "取消自启" : "开机自启" }}
-          </button>
-          <button class="btn btn-sm btn-danger" :disabled="busy" @click="doUninstall(v.version)">
-            卸载
-          </button>
+          <!-- 更多操作（展开行） -->
+          <div v-if="expandedVer === v.version" class="ver-more">
+            <button class="btn btn-sm" :disabled="busy" @click="doRestart(v.version)">
+              {{ acting?.version === v.version && acting?.action === 'restart' ? '重启中…' : '重启' }}
+            </button>
+            <button class="btn btn-sm" :disabled="busy" @click="openEdit(v.version, v.port)">
+              配置
+            </button>
+            <button class="btn btn-sm" :disabled="busy" @click="openLog(v.version)">
+              日志
+            </button>
+            <button
+              class="btn btn-sm"
+              :disabled="busy"
+              @click="toggleAutostart(v.version, v.autostart)"
+            >
+              {{ v.autostart ? "取消自启" : "开机自启" }}
+            </button>
+            <button class="btn btn-sm btn-danger" :disabled="busy" @click="doUninstall(v.version)">
+              卸载
+            </button>
+          </div>
         </div>
       </div>
       <p class="svc-muted svc-data-tip">
@@ -1128,5 +1150,80 @@ onUnmounted(() => unlisten?.());
 .install-loading {
   margin-top: var(--space-2);
   font-size: var(--text-sm);
+}
+
+/* ---- 已安装版本表格 ---- */
+.ver-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.ver-table-head {
+  display: grid;
+  grid-template-columns: 120px 80px 110px 70px 1fr;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 8px 16px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-app);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ver-table-row {
+  display: grid;
+  grid-template-columns: 120px 80px 110px 70px 1fr;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--duration) var(--ease);
+}
+
+.ver-table-row:last-child {
+  border-bottom: none;
+}
+
+.ver-table-row:hover {
+  background: var(--bg-panel-hover);
+}
+
+.ver-table-row.row-expanded {
+  background: var(--bg-app);
+}
+
+.ver-name {
+  font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.col-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
+}
+
+.col-ops {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* 更多操作展开行（跨整行） */
+.ver-more {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0 4px;
+  border-top: 1px dashed var(--border-subtle);
+  margin-top: 2px;
+  flex-wrap: wrap;
 }
 </style>
