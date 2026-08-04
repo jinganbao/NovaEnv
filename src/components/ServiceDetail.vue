@@ -471,9 +471,6 @@ onUnmounted(() => unlisten?.());
           </div>
         </div>
       </div>
-      <p class="svc-muted svc-data-tip">
-        数据目录：{{ service.dataDir }}
-      </p>
     </div>
 
     <!-- 安装进度 -->
@@ -914,11 +911,6 @@ onUnmounted(() => unlisten?.());
   gap: 6px;
   margin-left: auto;
   flex-wrap: wrap;
-}
-.svc-data-tip {
-  padding: 8px 12px 4px;
-  font-size: 11px;
-  word-break: break-all;
 }
 .btn.small {
   padding: 4px 10px;
