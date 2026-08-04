@@ -161,24 +161,36 @@ pub struct ServiceInfo {
     pub kind: ServiceKind,
     /// 展示名称（如 "Redis"）
     pub name: String,
-    /// 是否已安装
+    /// 是否已安装（任一版本）
     pub installed: bool,
-    /// 已安装版本（未安装为 None）
+    /// 已安装版本（最新版本；未安装为 None）
     pub version: Option<String>,
-    /// 是否运行中（端口探测）
+    /// 全部已安装版本（多版本支持）
+    pub versions: Vec<ServiceVersionInfo>,
+    /// 是否运行中（最新版本）
     pub running: bool,
-    /// 服务端口
+    /// 服务端口（最新版本）
     pub port: u16,
-    /// 进程 PID（运行中时）
+    /// 进程 PID（最新版本运行中时）
     pub pid: Option<u32>,
-    /// 当前访问密码（空表示未设置）
+    /// 当前访问密码（最新版本；空表示未设置）
     pub password: String,
-    /// 是否开启开机自启（launchd 托管）
+    /// 是否开启开机自启（最新版本）
     pub autostart: bool,
-    /// 数据目录
+    /// 数据目录（最新版本）
     pub data_dir: String,
     /// 平台支持说明（如 Windows 暂不支持）
     pub note: Option<String>,
+}
+
+/// 单个已安装服务版本的状态（多版本列表项）
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceVersionInfo {
+    pub version: String,
+    pub running: bool,
+    pub port: u16,
+    pub autostart: bool,
 }
 
 /// 服务安装请求

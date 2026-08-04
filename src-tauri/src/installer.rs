@@ -746,8 +746,12 @@ fn kind_name(kind: RuntimeKind) -> &'static str {
 
 /// 读取磁盘缓存（过期或损坏视为无缓存）
 fn load_disk_cache(kind: RuntimeKind) -> Option<Vec<AvailableVersionGroup>> {
-    let path = cache_path(kind);
-    let content = std::fs::read_to_string(&path).ok()?;
+    load_disk_cache_at(&cache_path(kind))
+}
+
+/// 从指定路径读取磁盘缓存（纯函数，便于测试）
+fn load_disk_cache_at(path: &std::path::Path) -> Option<Vec<AvailableVersionGroup>> {
+    let content = std::fs::read_to_string(path).ok()?;
     let json: serde_json::Value = serde_json::from_str(&content).ok()?;
     let fetched_at = json.get("fetched_at")?.as_u64()?;
     let now = std::time::SystemTime::now()
@@ -762,6 +766,11 @@ fn load_disk_cache(kind: RuntimeKind) -> Option<Vec<AvailableVersionGroup>> {
 
 /// 写磁盘缓存（失败静默，不影响主流程）
 fn save_disk_cache(kind: RuntimeKind, groups: &[AvailableVersionGroup]) {
+    save_disk_cache_at(&cache_path(kind), groups);
+}
+
+/// 写磁盘缓存到指定路径（纯函数，便于测试）
+fn save_disk_cache_at(path: &std::path::Path, groups: &[AvailableVersionGroup]) {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -770,13 +779,10 @@ fn save_disk_cache(kind: RuntimeKind, groups: &[AvailableVersionGroup]) {
         "fetched_at": now,
         "groups": groups,
     });
-    let dir = cache_path(kind).parent().map(|p| p.to_path_buf());
+    let dir = path.parent().map(|p| p.to_path_buf());
     if let Some(dir) = dir {
         let _ = std::fs::create_dir_all(&dir);
-        let _ = std::fs::write(
-            cache_path(kind),
-            serde_json::to_vec(&json).unwrap_or_default(),
-        );
+        let _ = std::fs::write(path, serde_json::to_vec(&json).unwrap_or_default());
     }
 }
 
@@ -1047,30 +1053,29 @@ fn emit_progress(
 mod tests {
     use super::*;
 
-    /// 磁盘缓存序列化往返测试（临时 HOME 避免污染真实用户目录）
+    /// 磁盘缓存序列化往返测试（临时文件路径，不改全局 HOME 环境变量）
     #[test]
     fn disk_cache_roundtrip() {
-        let original_home = std::env::var("HOME").ok();
-        std::env::set_var("HOME", "/tmp/novaenv-cache-test");
+        let path = std::env::temp_dir().join(format!(
+            "novaenv-cache-test-{}",
+            std::process::id()
+        ));
         let groups = vec![AvailableVersionGroup {
             major: "21".to_string(),
             is_lts: true,
             versions: vec!["21.0.12".to_string(), "21.0.11".to_string()],
             latest: "21.0.12".to_string(),
         }];
-        save_disk_cache(RuntimeKind::Java, &groups);
-        let loaded = load_disk_cache(RuntimeKind::Java);
+        save_disk_cache_at(&path, &groups);
+        let loaded = load_disk_cache_at(&path);
         assert!(loaded.is_some(), "磁盘缓存应可读回");
         let loaded = loaded.unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].major, "21");
         assert_eq!(loaded[0].latest, "21.0.12");
         assert_eq!(loaded[0].versions.len(), 2);
-        // 清理测试目录
-        let _ = std::fs::remove_dir_all("/tmp/novaenv-cache-test");
-        if let Some(home) = original_home {
-            std::env::set_var("HOME", home);
-        }
+        // 清理测试文件
+        let _ = std::fs::remove_file(&path);
     }
 }
 

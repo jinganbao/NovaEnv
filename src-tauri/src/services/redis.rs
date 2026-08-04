@@ -21,7 +21,9 @@ use std::time::Duration;
 #[cfg(target_os = "macos")]
 use tauri::Emitter;
 
-use crate::models::{AvailableVersionGroup, ServiceConfig, ServiceInfo, ServiceKind};
+use crate::models::{
+    AvailableVersionGroup, ServiceConfig, ServiceInfo, ServiceKind, ServiceVersionInfo,
+};
 #[cfg(target_os = "macos")]
 use crate::models::ServiceProgress;
 
@@ -83,34 +85,55 @@ fn conf_file(version: &str) -> PathBuf {
 pub fn info() -> ServiceInfo {
     #[cfg(target_os = "macos")]
     {
-        let installed = latest_installed();
-        let running = installed.as_ref().is_some_and(|v| is_running(v));
-        let conf = installed.as_ref().and_then(|v| read_conf(v));
-        let autostart = installed
-            .as_ref()
-            .map(|v| crate::services::launchd::plist_path("redis", v).exists())
-            .unwrap_or(false);
-        ServiceInfo {
+        let versions = installed_versions()
+            .into_iter()
+            .map(|v| {
+                let conf = read_conf(&v);
+                ServiceInfo {
+                    kind: ServiceKind::Redis,
+                    name: NAME.to_string(),
+                    installed: true,
+                    version: Some(v.clone()),
+                    versions: Vec::new(),
+                    running: is_running(&v),
+                    port: conf.as_ref().map(|c| c.port).unwrap_or(DEFAULT_PORT),
+                    pid: read_pid(&v),
+                    password: conf.map(|c| c.password).unwrap_or_default(),
+                    autostart: crate::services::launchd::plist_path("redis", &v).exists(),
+                    data_dir: data_root()
+                        .join("redis")
+                        .join(&v)
+                        .to_string_lossy()
+                        .into_owned(),
+                    note: None,
+                }
+            })
+            .collect::<Vec<_>>();
+        let latest = versions.last().cloned().unwrap_or_else(|| ServiceInfo {
             kind: ServiceKind::Redis,
             name: NAME.to_string(),
-            installed: installed.is_some(),
-            version: installed.clone(),
-            running,
-            port: conf.as_ref().map(|c| c.port).unwrap_or(DEFAULT_PORT),
-            pid: installed.as_ref().and_then(|v| read_pid(v)),
-            password: conf.map(|c| c.password).unwrap_or_default(),
-            autostart,
-            data_dir: installed
-                .as_ref()
-                .map(|v| {
-                    data_root()
-                        .join("redis")
-                        .join(v)
-                        .to_string_lossy()
-                        .into_owned()
-                })
-                .unwrap_or_default(),
+            installed: false,
+            version: None,
+            versions: Vec::new(),
+            running: false,
+            port: DEFAULT_PORT,
+            pid: None,
+            password: String::new(),
+            autostart: false,
+            data_dir: String::new(),
             note: None,
+        });
+        ServiceInfo {
+            versions: versions
+                .iter()
+                .map(|v| ServiceVersionInfo {
+                    version: v.version.clone().unwrap_or_default(),
+                    running: v.running,
+                    port: v.port,
+                    autostart: v.autostart,
+                })
+                .collect(),
+            ..latest
         }
     }
     #[cfg(not(target_os = "macos"))]
@@ -120,6 +143,7 @@ pub fn info() -> ServiceInfo {
             name: NAME.to_string(),
             installed: false,
             version: None,
+            versions: Vec::new(),
             running: false,
             port: DEFAULT_PORT,
             pid: None,
@@ -131,12 +155,12 @@ pub fn info() -> ServiceInfo {
     }
 }
 
-/// 已安装的最高版本（无则 None）
+/// 全部已安装版本（按版本升序；无则空列表）
 #[cfg(target_os = "macos")]
-fn latest_installed() -> Option<String> {
+fn installed_versions() -> Vec<String> {
     let dir = services_dir().join("redis");
     let Ok(entries) = std::fs::read_dir(&dir) else {
-        return None;
+        return Vec::new();
     };
     let mut versions: Vec<(String, PathBuf)> = entries
         .flatten()
@@ -148,7 +172,7 @@ fn latest_installed() -> Option<String> {
         })
         .collect();
     versions.sort_by(|a, b| cmp_versions(&a.0, &b.0));
-    versions.pop().map(|(v, _)| v)
+    versions.into_iter().map(|(v, _)| v).collect()
 }
 
 /// 端口是否可连接（服务运行判定）

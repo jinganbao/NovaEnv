@@ -10,24 +10,34 @@ export interface ServiceInfo {
   kind: ServiceKind;
   /** 展示名称（如 "Redis"） */
   name: string;
-  /** 是否已安装 */
+  /** 是否已安装（任一版本） */
   installed: boolean;
-  /** 已安装版本（未安装为 null） */
+  /** 已安装版本（最新版本；未安装为 null） */
   version: string | null;
-  /** 是否运行中（端口探测） */
+  /** 全部已安装版本（多版本列表） */
+  versions: ServiceVersionInfo[];
+  /** 是否运行中（最新版本） */
   running: boolean;
-  /** 服务端口 */
+  /** 服务端口（最新版本） */
   port: number;
-  /** 进程 PID（运行中时） */
+  /** 进程 PID（最新版本运行中时） */
   pid: number | null;
-  /** 当前访问密码（空表示未设置） */
+  /** 当前访问密码（最新版本；空表示未设置） */
   password: string;
-  /** 是否开启开机自启（launchd 托管） */
+  /** 是否开启开机自启（最新版本） */
   autostart: boolean;
-  /** 数据目录 */
+  /** 数据目录（最新版本） */
   dataDir: string;
   /** 平台支持说明（如 Windows 暂不支持） */
   note: string | null;
+}
+
+/** 单个已安装服务版本的状态（多版本列表项） */
+export interface ServiceVersionInfo {
+  version: string;
+  running: boolean;
+  port: number;
+  autostart: boolean;
 }
 
 /** 服务运行配置（端口 / 密码），用于安装与修改 */

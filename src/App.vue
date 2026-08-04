@@ -120,6 +120,7 @@ function emptyService(kind: ServiceInfo["kind"]): ServiceInfo {
     name: kind === "mysql" ? "MySQL" : "Redis",
     installed: false,
     version: null,
+    versions: [],
     running: false,
     port: kind === "mysql" ? 3306 : 6379,
     pid: null,

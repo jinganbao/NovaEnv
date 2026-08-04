@@ -33,27 +33,25 @@ let unlisten: (() => void) | null = null;
 const installPort = ref(props.service.port || 6379);
 const installPassword = ref("");
 
-// 修改配置弹窗
+// 修改配置弹窗（按版本）
 const editOpen = ref(false);
+const editVersion = ref("");
 const editPort = ref(6379);
 const editPassword = ref("");
 
 // 日志弹窗
 const logOpen = ref(false);
+const logVersion = ref("");
 const logContent = ref("");
 const logLoading = ref(false);
 
 /** 切换开机自启（launchd 托管：开机自启 + 崩溃自动拉起） */
-async function toggleAutostart() {
-  if (busy.value || !props.service.version) return;
+async function toggleAutostart(version: string, autostart: boolean) {
+  if (busy.value || !version) return;
   busy.value = true;
   result.value = null;
   try {
-    await setServiceAutostart(
-      props.service.kind,
-      props.service.version,
-      !props.service.autostart,
-    );
+    await setServiceAutostart(props.service.kind, version, !autostart);
     emit("refresh");
   } catch (e) {
     result.value = { ok: false, text: `设置开机自启失败: ${e}` };
@@ -63,13 +61,14 @@ async function toggleAutostart() {
 }
 
 /** 查看服务日志（尾部 200 行） */
-async function openLog() {
-  if (!props.service.version) return;
+async function openLog(version: string) {
+  if (!version) return;
+  logVersion.value = version;
   logOpen.value = true;
   logLoading.value = true;
   logContent.value = "";
   try {
-    logContent.value = await serviceLogs(props.service.kind, props.service.version);
+    logContent.value = await serviceLogs(props.service.kind, version);
   } catch (e) {
     logContent.value = `读取日志失败: ${e}`;
   } finally {
@@ -78,10 +77,10 @@ async function openLog() {
 }
 
 async function refreshLog() {
-  if (!props.service.version) return;
+  if (!logVersion.value) return;
   logLoading.value = true;
   try {
-    logContent.value = await serviceLogs(props.service.kind, props.service.version);
+    logContent.value = await serviceLogs(props.service.kind, logVersion.value);
   } catch (e) {
     logContent.value = `读取日志失败: ${e}`;
   } finally {
@@ -92,9 +91,14 @@ async function refreshLog() {
 /** 已安装版本所属大版本（用于行内标注） */
 const installedMajor = computed(() => props.service.version?.split(".")[0] ?? "");
 
-/** 已安装版本是否为某大版本最新（无更新则隐藏升级按钮） */
+/** 已安装版本列表（逗号分隔展示） */
+const installedText = computed(() =>
+  props.service.versions.map((v) => v.version).join("、"),
+);
+
+/** 该大版本是否已装有最新版本（无更新则隐藏升级按钮） */
 function isUpToDate(g: AvailableVersionGroup): boolean {
-  return installedMajor.value === g.major && props.service.version === g.latest;
+  return props.service.versions.some((v) => v.version === g.latest);
 }
 
 async function loadVersions() {
@@ -130,15 +134,16 @@ async function doInstall(target: string) {
 }
 
 /** 打开修改配置弹窗（预填当前配置） */
-function openEdit() {
-  editPort.value = props.service.port;
-  editPassword.value = props.service.password;
+function openEdit(version: string) {
+  editVersion.value = version;
+  editPort.value = 6379;
+  editPassword.value = "";
   editOpen.value = true;
 }
 
 /** 保存配置修改；运行中自动重启生效 */
 async function saveEdit() {
-  if (busy.value || !props.service.version) return;
+  if (busy.value || !editVersion.value) return;
   busy.value = true;
   result.value = null;
   try {
@@ -146,7 +151,7 @@ async function saveEdit() {
       port: editPort.value,
       password: editPassword.value.trim(),
     };
-    await updateServiceConfig(props.service.kind, props.service.version, config);
+    await updateServiceConfig(props.service.kind, editVersion.value, config);
     editOpen.value = false;
     result.value = { ok: true, text: "配置已保存" + (props.service.running ? "，服务已自动重启生效" : "") };
     emit("refresh");
@@ -157,12 +162,12 @@ async function saveEdit() {
   }
 }
 
-async function doStart() {
-  if (busy.value || !props.service.version) return;
+async function doStart(version: string) {
+  if (busy.value || !version) return;
   busy.value = true;
   result.value = null;
   try {
-    await startService(props.service.kind, props.service.version);
+    await startService(props.service.kind, version);
     emit("refresh");
   } catch (e) {
     result.value = { ok: false, text: `启动失败: ${e}` };
@@ -171,12 +176,12 @@ async function doStart() {
   }
 }
 
-async function doStop() {
-  if (busy.value || !props.service.version) return;
+async function doStop(version: string) {
+  if (busy.value || !version) return;
   busy.value = true;
   result.value = null;
   try {
-    await stopService(props.service.kind, props.service.version);
+    await stopService(props.service.kind, version);
     emit("refresh");
   } catch (e) {
     result.value = { ok: false, text: `停止失败: ${e}` };
@@ -185,12 +190,12 @@ async function doStop() {
   }
 }
 
-async function doRestart() {
-  if (busy.value || !props.service.version) return;
+async function doRestart(version: string) {
+  if (busy.value || !version) return;
   busy.value = true;
   result.value = null;
   try {
-    await restartService(props.service.kind, props.service.version);
+    await restartService(props.service.kind, version);
     emit("refresh");
   } catch (e) {
     result.value = { ok: false, text: `重启失败: ${e}` };
@@ -199,13 +204,13 @@ async function doRestart() {
   }
 }
 
-async function doUninstall() {
-  if (busy.value || !props.service.version) return;
-  if (!window.confirm("确定卸载 Redis？程序目录将被删除，数据目录保留。")) return;
+async function doUninstall(version: string) {
+  if (busy.value || !version) return;
+  if (!window.confirm(`确定卸载 ${props.service.name} ${version}？程序目录将被删除，数据目录保留。`)) return;
   busy.value = true;
   result.value = null;
   try {
-    await uninstallService(props.service.kind, props.service.version);
+    await uninstallService(props.service.kind, version);
     result.value = { ok: true, text: "卸载成功（数据目录已保留）" };
     emit("refresh");
   } catch (e) {
@@ -240,65 +245,57 @@ onUnmounted(() => unlisten?.());
       <p v-if="service.note" class="svc-note">{{ service.note }}</p>
     </div>
 
-    <!-- 状态卡 -->
+    <!-- 已安装版本列表（多版本支持） -->
     <div v-if="service.installed" class="svc-card">
-      <div class="svc-row">
-        <span class="svc-key">版本</span>
-        <span class="svc-val">{{ service.version }}</span>
-      </div>
-      <div class="svc-row">
-        <span class="svc-key">端口</span>
-        <span class="svc-val">{{ service.port }}</span>
-      </div>
-      <div class="svc-row">
-        <span class="svc-key">PID</span>
-        <span class="svc-val">{{ service.pid ?? "—" }}</span>
-      </div>
-      <div class="svc-row">
-        <span class="svc-key">密码</span>
-        <span class="svc-val">{{ service.password ? "已设置 ●●●" : "未设置" }}</span>
-      </div>
-      <div class="svc-row">
-        <span class="svc-key">数据目录</span>
-        <span class="svc-val path">{{ service.dataDir }}</span>
-      </div>
-
-      <div class="svc-row">
-        <span class="svc-key">开机自启</span>
-        <button
-          class="switch"
-          :class="{ on: service.autostart }"
-          :disabled="busy"
-          role="switch"
-          :aria-checked="service.autostart"
-          @click="toggleAutostart"
+      <div v-for="v in service.versions" :key="v.version" class="svc-version-row">
+        <span
+          class="badge"
+          :class="v.running ? 'badge-running' : 'badge-stopped'"
         >
-          <span class="switch-dot"></span>
-        </button>
-        <span class="svc-muted">
-          {{ service.autostart ? "开机自动启动，崩溃自动拉起" : "重启电脑后需手动启动" }}
+          {{ v.running ? "运行中" : "已停止" }}
         </span>
-      </div>
+        <span class="svc-val version">{{ v.version }}</span>
+        <span class="svc-muted">端口 {{ v.port }}</span>
+        <span v-if="v.autostart" class="badge badge-autostart">自启</span>
 
-      <div class="svc-actions">
-        <button
-          v-if="!service.running"
-          class="btn primary"
-          :disabled="busy"
-          @click="doStart"
-        >
-          启动
-        </button>
-        <template v-else>
-          <button class="btn" :disabled="busy" @click="doStop">停止</button>
-          <button class="btn" :disabled="busy" @click="doRestart">重启</button>
-        </template>
-        <button class="btn" :disabled="busy" @click="openEdit">修改配置</button>
-        <button class="btn" :disabled="busy" @click="openLog">查看日志</button>
-        <button class="btn danger" :disabled="busy" @click="doUninstall">
-          卸载
-        </button>
+        <div class="svc-actions">
+          <button
+            v-if="!v.running"
+            class="btn primary small"
+            :disabled="busy"
+            @click="doStart(v.version)"
+          >
+            启动
+          </button>
+          <template v-else>
+            <button class="btn small" :disabled="busy" @click="doStop(v.version)">
+              停止
+            </button>
+            <button class="btn small" :disabled="busy" @click="doRestart(v.version)">
+              重启
+            </button>
+          </template>
+          <button class="btn small" :disabled="busy" @click="openEdit(v.version)">
+            配置
+          </button>
+          <button class="btn small" :disabled="busy" @click="openLog(v.version)">
+            日志
+          </button>
+          <button
+            class="btn small"
+            :disabled="busy"
+            @click="toggleAutostart(v.version, v.autostart)"
+          >
+            {{ v.autostart ? "取消自启" : "开机自启" }}
+          </button>
+          <button class="btn small danger" :disabled="busy" @click="doUninstall(v.version)">
+            卸载
+          </button>
+        </div>
       </div>
+      <p class="svc-muted svc-data-tip">
+        数据目录：{{ service.dataDir }}
+      </p>
     </div>
 
     <!-- 安装面板：按大版本分组 -->
@@ -327,7 +324,7 @@ onUnmounted(() => unlisten?.());
             >
               {{ installedMajor === g.major ? `升级到 ${g.latest}` : "安装" }}
             </button>
-            <span v-else class="svc-muted">已安装 {{ service.version }}</span>
+            <span v-else class="svc-muted">已安装 {{ installedText }}</span>
           </div>
 
           <!-- 安装配置：端口 / 密码 -->
@@ -767,5 +764,41 @@ onUnmounted(() => unlisten?.());
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 多版本列表行 */
+.svc-version-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle, #262c35);
+  flex-wrap: wrap;
+}
+.svc-version-row:last-of-type {
+  border-bottom: none;
+}
+.svc-version-row .version {
+  font-weight: 600;
+  min-width: 72px;
+}
+.badge-autostart {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--brand, #34d399);
+}
+.svc-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.svc-data-tip {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  word-break: break-all;
+}
+.btn.small {
+  padding: 4px 10px;
+  font-size: 12px;
 }
 </style>
