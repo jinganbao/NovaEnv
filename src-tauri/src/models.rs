@@ -121,6 +121,76 @@ pub struct RuntimeOverview {
     pub java_home: Option<String>,
 }
 
+/// 服务类组件类型 —— 新增服务（MySQL、PostgreSQL 等）时在此扩展枚举，
+/// 并在 `services` 模块新增对应适配器即可接入。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ServiceKind {
+    Redis,
+}
+
+impl ServiceKind {
+    /// 界面展示用名称
+    #[allow(dead_code)]
+    pub fn display_name(self) -> &'static str {
+        match self {
+            ServiceKind::Redis => "Redis",
+        }
+    }
+
+    /// 默认端口
+    #[allow(dead_code)]
+    pub fn default_port(self) -> u16 {
+        match self {
+            ServiceKind::Redis => 6379,
+        }
+    }
+}
+
+/// 服务状态信息（`list_services` 返回）
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceInfo {
+    pub kind: ServiceKind,
+    /// 展示名称（如 "Redis"）
+    pub name: String,
+    /// 是否已安装
+    pub installed: bool,
+    /// 已安装版本（未安装为 None）
+    pub version: Option<String>,
+    /// 是否运行中（端口探测）
+    pub running: bool,
+    /// 服务端口
+    pub port: u16,
+    /// 进程 PID（运行中时）
+    pub pid: Option<u32>,
+    /// 数据目录
+    pub data_dir: String,
+    /// 平台支持说明（如 Windows 暂不支持）
+    pub note: Option<String>,
+}
+
+/// 服务安装请求
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceInstallRequest {
+    pub kind: ServiceKind,
+    /// 具体版本号（如 8.10.0）
+    pub version: String,
+}
+
+/// 服务安装进度事件（通过 tauri 事件 `service-progress` 推送）
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceProgress {
+    pub kind: ServiceKind,
+    pub version: String,
+    /// downloading / compiling / installing / done / error
+    pub stage: String,
+    pub percent: Option<u32>,
+    pub message: String,
+}
+
 /// `list_runtimes` 命令的返回负载
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

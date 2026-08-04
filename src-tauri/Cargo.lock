@@ -1874,6 +1874,7 @@ name = "novaenv"
 version = "1.0.4"
 dependencies = [
  "flate2",
+ "libc",
  "serde",
  "serde_json",
  "tar",

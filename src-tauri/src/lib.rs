@@ -6,11 +6,12 @@ mod installer;
 mod models;
 mod platform;
 mod runtimes;
+mod services;
 
 use activation::ActivationPreview;
 use models::{
     AvailableVersionGroup, InstallRequest, InstallResult, ManageInfo, RuntimesPayload,
-    RuntimeKind, RuntimeVersion,
+    RuntimeKind, RuntimeVersion, ServiceInfo, ServiceInstallRequest, ServiceKind,
 };
 
 /// 扫描全部运行时（JDK / Node / Go），返回概览 + 完整版本列表。
@@ -59,8 +60,112 @@ fn uninstall_version(version: RuntimeVersion) -> Result<(), String> {
 
 /// 获取管理目录信息（路径 / 版本数 / 占用空间）。
 #[tauri::command]
-fn get_manage_info() -> ManageInfo {
-    installer::manage_info()
+fn get_manage_info() -> ManageInfo {    installer::manage_info()
+}
+
+// ---------- 服务类组件（Redis 等） ----------
+
+/// 全部服务组件状态（安装情况 / 运行状态 / 端口）。
+#[tauri::command]
+fn list_services() -> Vec<ServiceInfo> {
+    services::list_all()
+}
+
+/// 服务的可安装版本列表（最新在前）。
+#[tauri::command]
+fn available_service_versions(kind: ServiceKind) -> Result<Vec<String>, String> {
+    match kind {
+        ServiceKind::Redis => services::redis::available_versions(),
+    }
+}
+
+/// 安装服务（异步执行，进度经 `service-progress` 事件推送）。
+#[tauri::command]
+async fn install_service(
+    app: tauri::AppHandle,
+    request: ServiceInstallRequest,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        {
+            services::redis::install(&app, request.kind, &request.version)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (&app, request);
+            Err("当前平台暂不支持 Redis 安装".to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("安装任务异常: {e}"))?
+}
+
+/// 卸载服务（保留数据目录）。
+#[tauri::command]
+fn uninstall_service(kind: ServiceKind, version: String) -> Result<(), String> {
+    match kind {
+        ServiceKind::Redis => {
+            #[cfg(target_os = "macos")]
+            {
+                services::redis::uninstall(&version)
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                Err("当前平台暂不支持 Redis 卸载".to_string())
+            }
+        }
+    }
+}
+
+/// 启动服务。
+#[tauri::command]
+fn start_service(kind: ServiceKind, version: String) -> Result<(), String> {
+    match kind {
+        ServiceKind::Redis => {
+            #[cfg(target_os = "macos")]
+            {
+                services::redis::start(&version)
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                Err("当前平台暂不支持 Redis".to_string())
+            }
+        }
+    }
+}
+
+/// 停止服务。
+#[tauri::command]
+fn stop_service(kind: ServiceKind, version: String) -> Result<(), String> {
+    match kind {
+        ServiceKind::Redis => {
+            #[cfg(target_os = "macos")]
+            {
+                services::redis::stop(&version)
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                Err("当前平台暂不支持 Redis".to_string())
+            }
+        }
+    }
+}
+
+/// 重启服务。
+#[tauri::command]
+fn restart_service(kind: ServiceKind, version: String) -> Result<(), String> {
+    match kind {
+        ServiceKind::Redis => {
+            #[cfg(target_os = "macos")]
+            {
+                services::redis::restart(&version)
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                Err("当前平台暂不支持 Redis".to_string())
+            }
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -75,7 +180,14 @@ pub fn run() {
             available_versions,
             install_version,
             uninstall_version,
-            get_manage_info
+            get_manage_info,
+            list_services,
+            available_service_versions,
+            install_service,
+            uninstall_service,
+            start_service,
+            stop_service,
+            restart_service
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

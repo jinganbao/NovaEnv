@@ -209,7 +209,7 @@ fn url_exists(url: &str) -> bool {
 /// 流式下载并推送进度事件（百分比变化时触发）。
 /// 注意：ureq 的 Request::timeout 是总超时，大文件下载不能用；
 /// 这里仅限制连接超时，读取不设上限。
-fn download(
+pub(crate) fn download(
     app: &AppHandle,
     kind: RuntimeKind,
     version: &str,
@@ -279,7 +279,7 @@ fn download(
 
 // ---------- 解压 ----------
 
-fn extract(archive: &Path, target: &Path) -> Result<(), String> {
+pub(crate) fn extract(archive: &Path, target: &Path) -> Result<(), String> {
     std::fs::create_dir_all(target).map_err(|e| format!("创建解压目录失败: {e}"))?;
     let ext = archive
         .extension()
@@ -740,8 +740,9 @@ fn http_get_json(url: &str) -> Result<serde_json::Value, String> {
 }
 
 /// GET 文本内容（用于解析 HTML 目录页，如 Apache Maven 版本列表）
-fn http_get_text(url: &str) -> Result<String, String> {
+pub(crate) fn http_get_text(url: &str) -> Result<String, String> {
     ureq::get(url)
+        .set("User-Agent", "NovaEnv/1.0")
         .timeout(Duration::from_secs(12))
         .call()
         .map_err(|e| format!("请求版本源失败（{url}）: {e}"))?
