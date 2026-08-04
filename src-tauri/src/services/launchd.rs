@@ -92,14 +92,14 @@ pub fn enable(
     if is_loaded(kind, version) {
         disable(kind, version)?;
     }
-    let status = Command::new("launchctl")
+    let status = Command::new("/bin/launchctl")
         .args(["bootstrap", "gui/501", path.to_str().unwrap_or_default()])
         .status()
         .map_err(|e| format!("launchctl 不可用: {e}"))?;
     if !status.success() {
         // gui/501 的 uid 硬编码在部分系统不匹配，改用当前 uid
         let uid = unsafe { libc::getuid() };
-        let status = Command::new("launchctl")
+        let status = Command::new("/bin/launchctl")
             .args([
                 "bootstrap",
                 &format!("gui/{uid}"),
@@ -119,7 +119,7 @@ pub fn enable(
 pub fn disable(kind: &str, version: &str) -> Result<(), String> {
     let label = label(kind, version);
     let uid = unsafe { libc::getuid() };
-    let _ = Command::new("launchctl")
+    let _ = Command::new("/bin/launchctl")
         .args(["bootout", &format!("gui/{uid}/{label}")])
         .status();
     let _ = std::fs::remove_file(plist_path(kind, version));
@@ -130,7 +130,7 @@ pub fn disable(kind: &str, version: &str) -> Result<(), String> {
 pub fn is_loaded(kind: &str, version: &str) -> bool {
     let label = label(kind, version);
     let uid = unsafe { libc::getuid() };
-    Command::new("launchctl")
+    Command::new("/bin/launchctl")
         .args(["print", &format!("gui/{uid}/{label}")])
         .output()
         .map(|o| o.status.success())
@@ -143,7 +143,7 @@ pub fn start(kind: &str, version: &str) -> Result<(), String> {
     let uid = unsafe { libc::getuid() };
     let path = plist_path(kind, version);
     if !is_loaded(kind, version) {
-        let status = Command::new("launchctl")
+        let status = Command::new("/bin/launchctl")
             .args([
                 "bootstrap",
                 &format!("gui/{uid}"),
@@ -157,7 +157,7 @@ pub fn start(kind: &str, version: &str) -> Result<(), String> {
         return Ok(());
     }
     // 已加载 → kickstart 拉起进程
-    let status = Command::new("launchctl")
+    let status = Command::new("/bin/launchctl")
         .args(["kickstart", &format!("gui/{uid}/{label}")])
         .status()
         .map_err(|e| format!("launchctl 不可用: {e}"))?;
@@ -172,7 +172,7 @@ pub fn stop(kind: &str, version: &str) -> Result<(), String> {
     let label = label(kind, version);
     let uid = unsafe { libc::getuid() };
     // 移除 KeepAlive 后再停：先用 bootout 卸载，之后 start 会重新 bootstrap
-    let _ = Command::new("launchctl")
+    let _ = Command::new("/bin/launchctl")
         .args(["bootout", &format!("gui/{uid}/{label}")])
         .status();
     Ok(())
@@ -185,7 +185,7 @@ pub fn restart(kind: &str, version: &str) -> Result<(), String> {
     if !is_loaded(kind, version) {
         return start(kind, version);
     }
-    let status = Command::new("launchctl")
+    let status = Command::new("/bin/launchctl")
         .args(["kickstart", "-k", &format!("gui/{uid}/{label}")])
         .status()
         .map_err(|e| format!("launchctl 不可用: {e}"))?;
