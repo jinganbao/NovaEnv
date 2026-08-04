@@ -140,8 +140,23 @@ fn read_pid(version: &str) -> Option<u32> {
 
 // ---------- 版本源 ----------
 
-/// 可用版本列表（官方 download.redis.io/releases/ 目录解析，最新在前）
+/// 内置兜底版本列表（官方源不可达时使用；均为 download.redis.io 已发布版本）
+const FALLBACK_VERSIONS: &[&str] = &[
+    "8.10.0", "8.8.1", "8.6.5", "8.4.0", "8.2.1", "8.0.4", "7.4.4", "7.2.8", "7.0.15",
+    "6.2.17", "6.0.20",
+];
+
+/// 可用版本列表（官方 download.redis.io/releases/ 目录解析，最新在前；
+/// 官方源不可达时回退内置版本表，保证功能可用）
 pub fn available_versions() -> Result<Vec<String>, String> {
+    match fetch_versions_from_official() {
+        Ok(versions) if !versions.is_empty() => Ok(versions),
+        _ => Ok(FALLBACK_VERSIONS.iter().map(|s| s.to_string()).collect()),
+    }
+}
+
+/// 解析官方版本目录页
+fn fetch_versions_from_official() -> Result<Vec<String>, String> {
     let html = crate::installer::http_get_text("https://download.redis.io/releases/")?;
     let mut versions = Vec::new();
     for (i, _) in html.match_indices("redis-") {

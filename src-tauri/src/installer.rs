@@ -743,7 +743,7 @@ fn http_get_json(url: &str) -> Result<serde_json::Value, String> {
 pub(crate) fn http_get_text(url: &str) -> Result<String, String> {
     ureq::get(url)
         .set("User-Agent", "NovaEnv/1.0")
-        .timeout(Duration::from_secs(12))
+        .timeout(Duration::from_secs(20))
         .call()
         .map_err(|e| format!("请求版本源失败（{url}）: {e}"))?
         .into_string()
