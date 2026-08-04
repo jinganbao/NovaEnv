@@ -24,6 +24,33 @@ const props = defineProps<{ service: ServiceInfo }>();
 const emit = defineEmits<{ (e: "refresh"): void }>();
 
 const versions = ref<AvailableVersionGroup[]>([]);
+/** 下拉选中的待安装版本 */
+const installTarget = ref("");
+
+/** 全部可用版本平铺（倒序，最新在前） */
+const flatVersions = computed(() => {
+  const flat: { version: string; installed: boolean }[] = [];
+  for (const g of versions.value) {
+    for (const v of g.versions) {
+      flat.push({
+        version: v,
+        installed: !!props.service.versions.find((s) => s.version === v),
+      });
+    }
+  }
+  return flat.sort((a, b) => {
+    const nums = (s: string) => s.match(/\d+/g)?.map(Number) ?? [];
+    const na = nums(a.version);
+    const nb = nums(b.version);
+    const len = Math.max(na.length, nb.length);
+    for (let i = 0; i < len; i++) {
+      const x = na[i] ?? 0;
+      const y = nb[i] ?? 0;
+      if (x !== y) return y - x;
+    }
+    return 0;
+  });
+});
 const loadingVersions = ref(false);
 const busy = ref(false);
 /** 正在执行的操作（版本 → 动作），用于按钮文案反馈 */
@@ -117,18 +144,12 @@ async function refreshLog() {
 }
 
 /** 已安装版本所属大版本（用于行内标注） */
-const installedMajor = computed(() => props.service.version?.split(".")[0] ?? "");
-
 /** 已安装版本列表（逗号分隔展示） */
 const installedText = computed(() =>
   props.service.versions.map((v) => v.version).join("、"),
 );
 
 /** 该大版本是否已装有最新版本（无更新则隐藏升级按钮） */
-function isUpToDate(g: AvailableVersionGroup): boolean {
-  return props.service.versions.some((v) => v.version === g.latest);
-}
-
 async function loadVersions() {
   // 每次拉取（后端有 5 分钟磁盘缓存，开销极小）；
   // 组件通过 :key 按服务重建，避免版本列表串用
@@ -142,7 +163,8 @@ async function loadVersions() {
   }
 }
 
-async function doInstall(target: string) {
+async function doInstall() {
+  const target = installTarget.value;
   if (busy.value || !target) return;
   busy.value = true;
   result.value = null;
@@ -152,10 +174,10 @@ async function doInstall(target: string) {
       port: installPort.value,
       password: installPassword.value.trim(),
     });
-    result.value = { ok: true, text: `Redis ${target} 安装完成` };
+    showToast(true, `${props.service.name} ${target} 安装完成`);
     emit("refresh");
   } catch (e) {
-    result.value = { ok: false, text: `安装失败: ${e}` };
+    showToast(false, `安装失败: ${e}`);
   } finally {
     busy.value = false;
   }
@@ -304,7 +326,7 @@ onUnmounted(() => unlisten?.());
     </div>
     <p v-if="service.note" class="svc-note">{{ service.note }}</p>
 
-    <!-- 安装面板：按大版本分组（置于列表上方，端口/密码配置始终可见） -->
+    <!-- 安装面板：版本下拉 + 端口/密码（始终可见） -->
     <div class="svc-card install-panel">
       <div class="svc-install">
         <div class="install-head">
@@ -312,55 +334,53 @@ onUnmounted(() => unlisten?.());
             {{
               service.installed
                 ? `安装其他版本（当前已安装：${installedText}）`
-                : `安装 ${service.name}（自动下载源码并编译，约 1-2 分钟）`
+                : `安装 ${service.name}（自动下载并安装，约 1-2 分钟）`
             }}
           </p>
-          <!-- 安装配置：端口 / 密码 -->
-          <div class="svc-config">
-            <label class="cfg-field">
-              <span class="cfg-label">端口</span>
-              <input
-                v-model.number="installPort"
-                type="number"
-                min="1"
-                max="65535"
-                class="cfg-input"
-              />
-            </label>
-            <label class="cfg-field">
-              <span class="cfg-label">密码（可选）</span>
-              <input
-                v-model="installPassword"
-                type="password"
-                placeholder="留空则不设置密码"
-                class="cfg-input"
-              />
-            </label>
-          </div>
         </div>
-        <div v-if="loadingVersions" class="svc-muted">正在获取版本列表…</div>
-        <div v-else-if="versions.length" class="svc-groups">
-          <div v-for="g in versions" :key="g.major" class="svc-group-row">
-            <span class="svc-major">{{ service.name }} {{ g.major }}</span>
-            <span class="svc-val">{{ g.latest }}</span>
-            <span
-              v-if="installedMajor === g.major"
-              class="badge"
-              :class="isUpToDate(g) ? 'badge-stopped' : 'badge-upgrade'"
-            >
-              {{ isUpToDate(g) ? "已是最新" : "有新版本" }}
-            </span>
-            <button
-              v-if="!isUpToDate(g)"
-              class="btn btn-primary btn-sm"
-              :disabled="busy"
-              @click="doInstall(g.latest)"
-            >
-              {{ `安装 ${g.latest}` }}
-            </button>
-            <span v-else class="svc-muted">已安装 {{ installedText }}</span>
-          </div>
+        <div class="install-row">
+          <label class="cfg-field">
+            <span class="cfg-label">端口</span>
+            <input
+              v-model.number="installPort"
+              type="number"
+              min="1"
+              max="65535"
+              class="cfg-input"
+            />
+          </label>
+          <label class="cfg-field">
+            <span class="cfg-label">密码（可选）</span>
+            <input
+              v-model="installPassword"
+              type="password"
+              placeholder="留空则不设置密码"
+              class="cfg-input"
+            />
+          </label>
+          <label class="cfg-field cfg-version">
+            <span class="cfg-label">版本</span>
+            <select v-model="installTarget" class="cfg-input cfg-select" :disabled="busy || loadingVersions">
+              <option value="" disabled>选择版本…</option>
+              <option
+                v-for="ver in flatVersions"
+                :key="ver.version"
+                :value="ver.version"
+                :disabled="ver.installed"
+              >
+                {{ ver.version }}{{ ver.installed ? "（已安装）" : "" }}
+              </option>
+            </select>
+          </label>
+          <button
+            class="btn btn-primary"
+            :disabled="busy || !installTarget"
+            @click="doInstall()"
+          >
+            {{ busy ? "安装中…" : "安装" }}
+          </button>
         </div>
+        <div v-if="loadingVersions" class="svc-muted install-loading">正在获取版本列表…</div>
       </div>
     </div>
 
@@ -1077,5 +1097,36 @@ onUnmounted(() => unlisten?.());
   border-top: 1px dashed var(--border-subtle);
   background: var(--bg-app);
   flex-wrap: wrap;
+}
+
+/* ---- 安装面板（下拉行） ---- */
+.install-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.cfg-version {
+  min-width: 220px;
+  flex: 1;
+}
+
+.cfg-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa6b7' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+  cursor: pointer;
+}
+
+.cfg-select:disabled {
+  cursor: not-allowed;
+}
+
+.install-loading {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
 }
 </style>
