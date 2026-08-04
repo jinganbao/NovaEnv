@@ -159,3 +159,13 @@ export function onServiceProgress(
     handler(event.payload),
   );
 }
+
+/** 应用版本号 */
+export async function getAppVersion(): Promise<string> {
+  return invoke<string>("app_version");
+}
+
+/** 用系统默认浏览器打开链接 */
+export async function openExternal(url: string): Promise<void> {
+  await invoke("open_url", { url });
+}

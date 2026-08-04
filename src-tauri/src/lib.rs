@@ -67,6 +67,39 @@ fn uninstall_version(version: RuntimeVersion) -> Result<(), String> {
     result
 }
 
+/// 应用版本号（与 Cargo.toml 一致，构建时注入）
+#[tauri::command]
+fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+/// 用系统默认浏览器/应用打开链接
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&url)
+            .status()
+            .map_err(|e| format!("打开链接失败: {e}"))?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "", &url])
+            .status()
+            .map_err(|e| format!("打开链接失败: {e}"))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&url)
+            .status()
+            .map_err(|e| format!("打开链接失败: {e}"))?;
+    }
+    Ok(())
+}
+
 /// 获取管理目录信息（路径 / 版本数 / 占用空间）。
 #[tauri::command]
 fn get_manage_info() -> ManageInfo {
@@ -430,7 +463,9 @@ pub fn run() {
             stop_service,
             restart_service,
             set_service_autostart,
-            service_logs
+            service_logs,
+            app_version,
+            open_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

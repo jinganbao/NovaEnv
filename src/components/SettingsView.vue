@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { getManageInfo } from "../api";
+import { getManageInfo, openExternal } from "../api";
 import { useAppUpdate } from "../composables/useAppUpdate";
 import { useConfig } from "../composables/useConfig";
 import { themeModeOptions, themePresets, useTheme } from "../composables/useTheme";
@@ -57,6 +57,13 @@ onMounted(() => {
   loadManageInfo();
   update.loadCurrentVersion();
 });
+
+/** 打开项目主页 */
+function openRepo() {
+  openExternal("https://github.com/novahub-labs/novaenv").catch((e) => {
+    feedback.value = { ok: false, text: `打开链接失败: ${e}` };
+  });
+}
 </script>
 
 <template>
@@ -219,6 +226,24 @@ onMounted(() => {
       <p class="hint">
         NovaEnv 安装的版本存放在此目录（仅应用管理，不影响系统环境）；卸载、升级均在本目录内操作。
       </p>
+    </section>
+
+    <!-- 关于 -->
+    <section class="card">
+      <h3>关于</h3>
+      <div class="manage-row">
+        <span class="row-label">NovaEnv</span>
+        <span class="row-value">v{{ currentVersion || "…" }}</span>
+      </div>
+      <div class="manage-row">
+        <span class="row-label">能力</span>
+        <span class="row-value">Java · Node.js · Go · Maven · Python · Redis · MySQL</span>
+      </div>
+      <div class="manage-row">
+        <span class="row-label">项目主页</span>
+        <button class="link-btn" @click="openRepo">github.com/novahub-labs/novaenv</button>
+      </div>
+      <p class="about-copy">© 2026 NovaHub · MIT License · 本地环境管理工具</p>
     </section>
   </div>
 </template>
@@ -524,5 +549,25 @@ h3 {
   color: var(--text-muted);
   border-top: 1px dashed var(--border-subtle);
   padding-top: 12px;
+}
+
+/* 关于区块 */
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent, #34d399);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.link-btn:hover {
+  opacity: 0.8;
+}
+.about-copy {
+  margin: 12px 0 0;
+  font-size: 11px;
+  color: var(--text-tertiary, #6b7686);
 }
 </style>
