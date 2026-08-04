@@ -2,6 +2,40 @@
 
 export type RuntimeKind = "java" | "node" | "go" | "maven";
 
+/** 服务类组件类型 */
+export type ServiceKind = "redis";
+
+/** 服务状态信息（list_services 返回） */
+export interface ServiceInfo {
+  kind: ServiceKind;
+  /** 展示名称（如 "Redis"） */
+  name: string;
+  /** 是否已安装 */
+  installed: boolean;
+  /** 已安装版本（未安装为 null） */
+  version: string | null;
+  /** 是否运行中（端口探测） */
+  running: boolean;
+  /** 服务端口 */
+  port: number;
+  /** 进程 PID（运行中时） */
+  pid: number | null;
+  /** 数据目录 */
+  dataDir: string;
+  /** 平台支持说明（如 Windows 暂不支持） */
+  note: string | null;
+}
+
+/** 服务安装进度事件 */
+export interface ServiceProgress {
+  kind: ServiceKind;
+  version: string;
+  /** downloading / compiling / installing / done / error */
+  stage: string;
+  percent: number | null;
+  message: string;
+}
+
 export interface RuntimeVersion {
   kind: RuntimeKind;
   /** 版本号，如 17.0.10 / 22.11.0 / 1.23.4 */

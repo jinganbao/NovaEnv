@@ -1,18 +1,19 @@
 <script setup lang="ts">
-import type { RuntimeKind } from "../types";
+import type { RuntimeKind, ServiceInfo } from "../types";
 import { RUNTIME_META } from "../types";
 
 defineProps<{
   kinds: RuntimeKind[];
-  selected: RuntimeKind | "settings";
+  selected: RuntimeKind | ServiceInfo["kind"] | "settings";
   counts: Record<RuntimeKind, number>;
+  services: ServiceInfo[];
 }>();
 const emit = defineEmits<{
-  (e: "select", kind: RuntimeKind | "settings"): void;
+  (e: "select", kind: RuntimeKind | ServiceInfo["kind"] | "settings"): void;
 }>();
 
-function isKind(value: RuntimeKind | "settings"): value is RuntimeKind {
-  return value !== "settings";
+function isKind(value: RuntimeKind | ServiceInfo["kind"] | "settings"): value is RuntimeKind {
+  return value !== "settings" && value !== "redis";
 }
 </script>
 
@@ -33,9 +34,22 @@ function isKind(value: RuntimeKind | "settings"): value is RuntimeKind {
       </button>
 
       <div class="group-label">服务类组件</div>
-      <div class="nav-empty">
-        <span class="nav-empty-text">暂无已安装服务</span>
-        <span class="nav-empty-sub">Redis / MySQL 支持规划中</span>
+      <button
+        v-for="s in services"
+        :key="s.kind"
+        class="nav-item"
+        :class="{ active: selected === s.kind }"
+        @click="emit('select', s.kind)"
+      >
+        <span
+          class="svc-dot"
+          :class="s.installed ? (s.running ? 'on' : 'off') : 'none'"
+        ></span>
+        <span class="nav-name">{{ s.name }}</span>
+        <span class="nav-count">{{ s.installed ? s.version : "未安装" }}</span>
+      </button>
+      <div v-if="!services.length" class="nav-empty">
+        <span class="nav-empty-text">暂无服务</span>
       </div>
     </nav>
 
@@ -102,6 +116,26 @@ function isKind(value: RuntimeKind | "settings"): value is RuntimeKind {
 .nav-empty-sub {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.svc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.svc-dot.on {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft);
+}
+
+.svc-dot.off {
+  background: var(--warning);
+}
+
+.svc-dot.none {
+  background: var(--text-muted);
 }
 
 .nav-item {

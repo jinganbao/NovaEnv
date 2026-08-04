@@ -9,6 +9,9 @@ import type {
   RuntimesPayload,
   RuntimeKind,
   RuntimeVersion,
+  ServiceInfo,
+  ServiceKind,
+  ServiceProgress,
 } from "./types";
 
 /** 扫描全部运行时：概览 + 版本列表 */
@@ -61,4 +64,67 @@ export function onInstallProgress(
 /** 获取管理目录信息（路径 / 版本数 / 占用空间） */
 export function getManageInfo(): Promise<ManageInfo> {
   return invoke("get_manage_info");
+}
+
+// ---------- 服务类组件 ----------
+
+/** 全部服务组件状态 */
+export function listServices(): Promise<ServiceInfo[]> {
+  return invoke("list_services");
+}
+
+/** 服务的可安装版本列表（最新在前） */
+export function availableServiceVersions(
+  kind: ServiceKind,
+): Promise<string[]> {
+  return invoke("available_service_versions", { kind });
+}
+
+/** 安装服务（进度经 service-progress 事件推送） */
+export function installService(
+  kind: ServiceKind,
+  version: string,
+): Promise<void> {
+  return invoke("install_service", { request: { kind, version } });
+}
+
+/** 卸载服务（保留数据目录） */
+export function uninstallService(
+  kind: ServiceKind,
+  version: string,
+): Promise<void> {
+  return invoke("uninstall_service", { kind, version });
+}
+
+/** 启动服务 */
+export function startService(
+  kind: ServiceKind,
+  version: string,
+): Promise<void> {
+  return invoke("start_service", { kind, version });
+}
+
+/** 停止服务 */
+export function stopService(
+  kind: ServiceKind,
+  version: string,
+): Promise<void> {
+  return invoke("stop_service", { kind, version });
+}
+
+/** 重启服务 */
+export function restartService(
+  kind: ServiceKind,
+  version: string,
+): Promise<void> {
+  return invoke("restart_service", { kind, version });
+}
+
+/** 监听服务安装进度事件，返回取消监听函数 */
+export function onServiceProgress(
+  handler: (progress: ServiceProgress) => void,
+): Promise<UnlistenFn> {
+  return listen<ServiceProgress>("service-progress", (event) =>
+    handler(event.payload),
+  );
 }

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import {
   activate,
   availableVersions,
   listRuntimes,
+  listServices,
   previewActivation,
   uninstallVersion,
 } from "./api";
@@ -12,6 +13,7 @@ import type {
   RuntimesPayload,
   RuntimeKind,
   RuntimeVersion,
+  ServiceInfo,
 } from "./types";
 import { RUNTIME_META } from "./types";
 import { useAppUpdate } from "./composables/useAppUpdate";
@@ -19,11 +21,15 @@ import { useConfig } from "./composables/useConfig";
 import { useTheme } from "./composables/useTheme";
 import ActivationModal from "./components/ActivationModal.vue";
 import RuntimeDetail from "./components/RuntimeDetail.vue";
+import ServiceDetail from "./components/ServiceDetail.vue";
 import SettingsView from "./components/SettingsView.vue";
 import Sidebar from "./components/Sidebar.vue";
 import UninstallModal from "./components/UninstallModal.vue";
 
 const kinds: RuntimeKind[] = ["java", "node", "go", "maven"];
+const serviceKinds = ["redis"] as const;
+
+type Selected = RuntimeKind | (typeof serviceKinds)[number] | "settings";
 
 // 配置与主题（启动即应用持久化的主题设置）
 const config = useConfig();
@@ -32,7 +38,8 @@ useTheme(config);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const payload = ref<RuntimesPayload | null>(null);
-const selected = ref<RuntimeKind | "settings">("java");
+const services = ref<ServiceInfo[]>([]);
+const selected = ref<Selected>("java");
 
 // 切换默认流程
 const pendingVersion = ref<RuntimeVersion | null>(null);
@@ -84,6 +91,40 @@ async function refresh() {
   } finally {
     loading.value = false;
   }
+}
+
+// ---- 服务类组件 ----
+
+async function loadServices() {
+  try {
+    services.value = await listServices();
+  } catch {
+    // 服务状态轮询失败静默（不打断主界面）
+  }
+}
+
+function serviceOf(kind: ServiceInfo["kind"]): ServiceInfo | undefined {
+  return services.value.find((s) => s.kind === kind);
+}
+
+// 服务列表为空时的兜底展示（正常情况 list_services 恒返回 Redis 项）
+const emptyRedis: ServiceInfo = {
+  kind: "redis",
+  name: "Redis",
+  installed: false,
+  version: null,
+  running: false,
+  port: 6379,
+  pid: null,
+  dataDir: "",
+  note: null,
+};
+
+// 服务状态轮询（3s），保证状态点与详情页实时性
+let pollTimer: number | undefined;
+function startPolling() {
+  loadServices();
+  pollTimer = window.setInterval(loadServices, 3000);
 }
 
 // ---- 切换默认 ----
@@ -154,11 +195,16 @@ function overviewValue(kind: RuntimeKind): string {
 
 onMounted(() => {
   refresh();
-  // 后台并行预加载三个环境的可用版本列表（写入后端缓存），
+  startPolling();
+  // 后台并行预加载各环境的可用版本列表（写入后端缓存），
   // 首次切换环境时无需再等待网络请求
   for (const k of kinds) {
     availableVersions(k).catch(() => {});
   }
+});
+
+onUnmounted(() => {
+  window.clearInterval(pollTimer);
 });
 </script>
 
@@ -197,14 +243,23 @@ onMounted(() => {
         :kinds="kinds"
         :selected="selected"
         :counts="counts"
+        :services="services"
         @select="selected = $event"
       />
 
       <main class="content">
-        <div v-if="!payload && loading && selected !== 'settings'" class="placeholder">
+        <div
+          v-if="!payload && loading && selected !== 'settings' && selected !== 'redis'"
+          class="placeholder"
+        >
           正在扫描本机开发环境…
         </div>
         <SettingsView v-else-if="selected === 'settings'" />
+        <ServiceDetail
+          v-else-if="selected === 'redis'"
+          :service="serviceOf('redis') ?? emptyRedis"
+          @refresh="loadServices"
+        />
         <RuntimeDetail
           v-else-if="payload"
           :kind="selected"
