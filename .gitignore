@@ -23,3 +23,14 @@ src-tauri/gen/
 
 # Reasonix
 .reasonix
+
+# 运行时产物
+*.dmg
+*.app.tar.gz
+*.msi
+*.AppImage
+*.deb
+
+# 环境
+.env
+.env.local

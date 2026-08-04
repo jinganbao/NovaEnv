@@ -1,173 +1,101 @@
 # NovaEnv
 
-> 开发环境可视化管理工具（ServBay 类）。管理本机已安装的 **JDK / Node.js / Go**，支持扫描展示、一键切换默认版本、按大版本安装/升级/卸载；架构预留下载安装引擎与多版本数据库（MySQL / PostgreSQL / Redis 等）服务管理。
+> 本地开发环境管理工具 — 一站式安装、切换与管理开发运行时与服务。
 
-[![GitHub release](https://img.shields.io/github/v/release/jinganbao/NovaEnv)](https://github.com/jinganbao/NovaEnv/releases)
-[![GitHub Actions](https://img.shields.io/github/actions/workflow/status/jinganbao/NovaEnv/release.yml?label=Release%20CI)](https://github.com/jinganbao/NovaEnv/actions)
-[![Tauri](https://img.shields.io/badge/Tauri-2-34d399)](https://v2.tauri.app)
-[![Vue](https://img.shields.io/badge/Vue-3-42b883)](https://vuejs.org)
+NovaEnv 是一个基于 Tauri 2 的桌面应用，帮助你像管理包依赖一样管理本机的开发环境：
+安装指定版本、按大版本分组浏览、一键切换默认版本、服务化运行数据库与缓存。
+
+## 功能
+
+### 语言运行时
+
+| 运行时 | 版本源 | 说明 |
+| --- | --- | --- |
+| ☕ Java (JDK) | Azul Zulu | 全版本安装，自动识别大版本与 LTS |
+| 🟢 Node.js | nodejs.org 官方源 | 自动区分 LTS / Current |
+| 🐹 Go | go.dev 官方源 | 大版本按 `1.x` 分组 |
+| 📦 Maven | 国内镜像 + Apache 官方 | 完整历史版本 |
+| 🐍 Python | python-build-standalone | 预编译 install_only 包，开箱即用 |
+
+- 按大版本分组展示全部可用版本，已安装版本在列表中直接标注
+- 同一大版本只保留最新小版本：安装新版自动移除旧版（旧版为默认时自动提升新版）
+- 一键切换默认版本，自动写入 `~/.zshrc`（macOS）并 `source` 生效
+- 支持卸载（仅限 NovaEnv 管理的版本）
+
+### 服务类组件（macOS）
+
+| 服务 | 能力 |
+| --- | --- |
+| 🗄️ Redis | 源码编译安装、自定义端口/密码、开机自启、崩溃自动拉起 |
+| 🐬 MySQL | 官方预编译包、自定义端口/密码、开机自启、崩溃自动拉起 |
+
+- 独立的进程管理（pid + 端口探测），应用退出后服务继续运行
+- 数据目录与程序目录分离（`~/.novaenv/data`），卸载服务保留数据
+- 服务日志实时查看
+
+### 其他
+
+- 🎨 主题系统：浅色 / 深色 / 跟随系统 + 多套配色预设
+- 🔄 应用内更新检查与安装（GitHub Releases 通道）
+- 📁 管理目录总览（各目录占用空间、服务数据）
+- 📝 操作日志：`~/.novaenv/logs/app.log`
+- ⚠️ 全局错误捕获：错误遮罩 + 一键重载，杜绝白屏
+
+## 安装
+
+### 从 Release 下载
+
+前往 [Releases](https://github.com/novahub-labs/novaenv/releases) 下载对应平台的安装包：
+
+- macOS：`.dmg` / `.app.tar.gz`（Apple Silicon 与 Intel）
+- Windows：`.msi` / `.exe`
+- Linux：`.deb` / `.AppImage`
+
+### 从源码构建
+
+```bash
+# 环境要求：Node.js ≥ 20、Rust stable、pnpm
+pnpm install
+pnpm tauri dev      # 开发模式
+pnpm tauri build    # 打包
+```
+
+## 快速上手
+
+1. 启动 NovaEnv，左侧选择运行时（如 Java）
+2. 右侧按大版本列出全部可用版本，点击「安装」并等待进度完成
+3. 安装后点击「设为默认」，新打开的终端即生效
+4. 服务类组件：安装 Redis / MySQL 后可配置端口与密码，支持开机自启
+
+### 目录结构
+
+```
+~/.novaenv/
+├── installs/     # 运行时安装目录（java / node / go / maven / python）
+├── services/     # 服务安装目录（redis / mysql，按版本）
+├── data/         # 服务数据（卸载服务时保留）
+├── logs/         # 应用日志与服务日志
+└── run/          # pid / socket 文件
+```
 
 ## 技术栈
 
-- **前端**: Vue 3 + TypeScript + Vite
-- **后端**: Rust + Tauri 2
-- **平台**: macOS / Windows（跨平台，条件编译）
+- [Tauri 2](https://tauri.app/) + Rust（tokio、ureq、tar、zip）
+- Vue 3 + TypeScript + Vite
+- macOS：launchd（服务自启）、`libc`（进程管理）
+- 更新：tauri-plugin-updater（GitHub Releases）
 
-## 目录结构
-
-```
-NovaEnv/
-├── .github/workflows/        # GitHub Actions（release.yml 四平台打包）
-├── scripts/
-│   ├── release.sh            # 发布脚本（版本更新 → 提交 → tag → 推送）
-│   └── gen_icons.py          # 备用图标生成脚本（正式图标由 tauri icon 生成）
-├── src/                      # 前端（Vue 3）
-│   ├── api.ts                # invoke 封装（list_runtimes / preview_activation / activate）
-│   ├── types.ts              # TS 类型（与 Rust models.rs 契约对齐）
-│   ├── App.vue               # 主界面：侧边栏 + 概览条 + 环境详情
-│   └── components/
-│       ├── Sidebar.vue           # 左侧环境导航
-│       ├── RuntimeDetail.vue     # 环境详情（当前默认 + 版本列表）
-│       ├── RuntimeVersionList.vue# 按大版本分组的可用版本列表（安装/升级/切换/卸载）
-│       ├── VersionCard.vue       # 版本卡片（已弃用，保留参考）
-│       ├── ActivationModal.vue   # 切换默认确认弹窗
-│       └── UninstallModal.vue    # 卸载确认弹窗
-├── src-tauri/                # 后端（Rust + Tauri 2）
-│   ├── src/
-│   │   ├── models.rs           # 数据模型（RuntimeKind / RuntimeVersion 等）
-│   │   ├── adapter.rs          # RuntimeAdapter trait（运行时抽象）
-│   │   ├── activation.rs       # 切换默认环境引擎（预览 + 执行）
-│   │   ├── installer.rs        # 安装/卸载引擎（官方源版本列表 + 下载 + 解压 + 缓存）
-│   │   ├── platform/           # 平台实现（macos.rs / windows.rs，#[cfg] 分离）
-│   │   ├── runtimes/           # 运行时适配器（java.rs / node.rs / go.rs）
-│   │   ├── lib.rs              # Tauri 入口与 commands 注册
-│   │   └── main.rs
-│   ├── capabilities/           # Tauri 2 权限配置
-│   └── icons/                  # 全套图标（app-icon.svg 源文件 + tauri icon 生成）
-└── README.md
-```
-
-## 环境要求
-
-- **Rust** (stable) — https://rustup.rs
-- **Node.js** ≥ 18 — https://nodejs.org
-- Tauri 2 系统依赖（macOS 需 Xcode Command Line Tools；Windows 需 WebView2 + MSVC Build Tools），详见 [Tauri 官方文档](https://v2.tauri.app/start/prerequisites/)
-
-## 常用命令
-
-npm 工作流：
+## 开发
 
 ```bash
-npm install          # 安装前端依赖
-npm run tauri dev    # 开发模式（前端 HMR + Rust 热编译）
-npm run build        # 前端类型检查（vue-tsc）+ 构建
-cargo check          # Rust 编译检查（在 src-tauri 目录）
-npm run tauri build  # 打包发布（生成 .dmg / .msi 等）
+cargo test        # Rust 单元测试
+cargo clippy      # 静态检查（CI 门禁）
+pnpm run build    # 前端类型检查 + 构建
 ```
 
-pnpm 工作流（与 npm 等价，推荐）：
+发布流程（`.github/workflows/release.yml`）：打 tag 即触发四平台打包，
+自动上传 GitHub Releases，应用内更新通道同步生效。
 
-```bash
-pnpm install         # 安装依赖（esbuild / @tauri-apps/cli 的构建脚本自动放行）
-pnpm run tauri dev
-pnpm run build
-pnpm tauri build
-```
+## License
 
-> **pnpm 用户注意事项**：pnpm 10+ 默认阻止依赖的 postinstall 脚本。本项目已在
-> `pnpm-workspace.yaml` 中配置 `allowBuilds` 放行 `esbuild` 与 `@tauri-apps/cli`，
-> 并设置 `confirmModulesPurge: false` 避免非 TTY 环境（IDE 终端）下
-> `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` 报错。
-
-## 功能说明
-
-| 功能 | 说明 |
-| --- | --- |
-| 扫描已安装运行时 | JDK（macOS `java_home -V` / Windows 注册表 + 常见目录）、Node（nvm / fnm / Homebrew / 官方）、Go（官方 / Homebrew / goenv） |
-| 展示 | 左侧边栏导航 + 顶部当前版本概览；版本卡片显示版本号 / 发行版 / 路径 / 默认标记 / NovaEnv 管理标记 |
-| 切换默认版本 | macOS 幂等更新 `~/.zshrc`（NovaEnv 管理块 + 自动执行 source ~/.zshrc）；若检测到 **mise** 全局接管了该运行时，自动执行 `mise rm -g <tool>` 让位（仅全局配置，项目级 mise.toml 不受影响，可随时 `mise use -g` 收回）；Windows 通过 PowerShell 写入用户级环境变量（规避 setx PATH 截断） |
-| 变更预览 | 切换前展示将写入的配置行与备份路径，确认后执行 |
-| **安装新版本** | 右侧按大版本分组的可用版本列表（官方源：Java 为 **Azul Zulu**、Node 为 nodejs.org、Go 为 go.dev、**Maven 为 archive.apache.org**），LTS 标记；已安装版本直接在对应大版本行后标注（含默认/卸载操作），同一大版本有小版本更新时显示「升级到 x.y.z」按钮；流式下载 + 实时进度条（含无长度响应时的不定进度动画）+ 解压到 `~/.novaenv/installs/<kind>/<version>/` |
-| **卸载** | 仅可卸载 NovaEnv 管理安装的版本（删除 `~/.novaenv/installs` 下目录），默认版本需先切换 |
-| **设置** | 左侧边栏 ⚙️ 入口：主题（跟随系统/暗色/亮色 + Nova 系列 6 色主题预设）、版本更新（检查/下载/安装/自动检查开关）、管理目录（路径/版本数/占用空间统计） |
-
-> 注意：切换后需重新打开终端（或 `source ~/.zshrc`）生效。
-> 安装下载可能较大（JDK ~200MB / Node ~25MB / Go ~70MB），首次安装请耐心等待。
-
-## 架构与扩展指南
-
-核心抽象是 `RuntimeAdapter` trait（`src-tauri/src/adapter.rs`）：
-
-```rust
-pub trait RuntimeAdapter: Send + Sync {
-    fn kind(&self) -> RuntimeKind;
-    fn scan(&self) -> Vec<RuntimeVersion>;        // 扫描已安装版本
-    fn active_version(&self) -> Option<String>;   // 检测当前生效版本
-}
-```
-
-**新增一种语言运行时（如 Python）只需 4 步：**
-
-1. `models.rs` 的 `RuntimeKind` 增加枚举值（含 `display_name` / `env_var_name`）
-2. 新建 `runtimes/python.rs` 实现 `RuntimeAdapter`
-3. `runtimes/mod.rs` 的 `all()` 注册；`overview()` 补充概览字段
-4. `activation.rs` 的 `shell_lines()` 补充对应环境变量行
-
-前端无需改动（分组按 `RuntimeKind` 自动渲染），切换引擎自动适配（macOS/Windows 均已支持任意新运行时）。
-
-## 后期规划
-
-- [ ] **下载安装引擎**：从官方源（Adoptium / nodejs.org / go.dev）搜索、下载、解压安装新版本到应用管理目录
-- [ ] **数据库服务管理**：MySQL / PostgreSQL / Redis 多版本安装、启动 / 停止 / 状态监控（可复用 `RuntimeAdapter` 抽象扩展为 Service 管理）
-- [ ] 卸载已安装版本、版本间依赖切换回滚
-- [ ] 正式图标（`npm run tauri icon <源图>`）与应用签名
-
-## 发布流程
-
-参考 NovaMsg 的整套发布体系（GitHub Actions 四平台打包 + Tauri updater 自动更新）：
-
-```bash
-# 1. 发布新版本（自动更新三处版本号 + 提交 + 打 tag + 推送）
-./scripts/release.sh 0.1.1
-
-# 2. 推送后 GitHub Actions 自动执行：
-#    - macOS (Apple Silicon + Intel) / Ubuntu / Windows 四平台打包
-#    - 生成安装包并发布 GitHub Release
-#    - 生成 latest.json（updater 自动更新清单）
-```
-
-### 首次发布前配置（一次性）
-
-1. **生成签名密钥**（若未生成）：
-   ```bash
-   pnpm tauri signer generate --ci --password "" -w ~/.tauri/novaenv.key
-   ```
-   生成两个文件：`~/.tauri/novaenv.key`（私钥）与 `~/.tauri/novaenv.key.pub`（公钥）。
-   **注意区分**：两个文件都是 base64 编码，内容都以 `dW50cnVzdGVk...` 开头，配置时别拿错文件。
-
-2. **GitHub Secrets**（Settings → Secrets and variables → Actions）：
-   - `TAURI_SIGNING_PRIVATE_KEY`：**私钥文件内容**（`cat ~/.tauri/novaenv.key`，base64，开头为 `dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWdu...`）
-   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：私钥密码（`--ci --password ""` 生成的为空密码，填空字符串即可）
-   - ⚠️ 不要使用 `novaenv.key.pub`（公钥）——粘贴公钥会导致 CI 报 `Missing comment in secret key`
-
-3. 发布完成后应用内可检测更新（updater 端点指向 GitHub Releases `latest.json`）
-
-## 主题
-
-NovaMsg 同款设计语言：CSS 变量体系（`--bg-app/--bg-sider/--bg-panel/--bg-input` + 双层边框），NovaEnv 品牌色 **#34D399**（emerald）。设置页支持：
-- 外观模式：跟随系统 / 暗色 / 亮色（持久化到 localStorage，`data-theme` 属性切换）
-- 主题色：Nova 系列 6 色预设（NovaEnv / NovaMsg / NovaDB / NovaFlow / NovaOps / NovaAI），动态注入品牌变量
-
-图标源文件 `src-tauri/icons/app-icon.svg`，改图标后执行 `pnpm tauri icon src-tauri/icons/app-icon.svg` 重新生成全套。
-
-## 当前进度
-
-- [x] 项目骨架（前端 + 后端 + 图标 + 权限配置）
-- [x] 运行时扫描引擎（JDK / Node / Go，macOS + Windows）
-- [x] 切换默认环境引擎（预览 + 幂等写入 + 自动 source + mise 让位）
-- [x] 前端界面（左侧边栏布局 + 概览条 + 版本卡片）
-- [x] 安装引擎（官方源版本列表 + 流式下载进度 + 解压安装到 ~/.novaenv）
-- [x] 卸载（仅 NovaEnv 管理的版本，默认版本保护）
-- [x] 全链路验证：`pnpm install` ✅ `pnpm run build` ✅ `cargo check`（零警告）✅ `tauri dev` 启动 ✅ 官方源 API/URL/归档结构实测 ✅
-- [ ] 下载完整性校验（SHA256 checksum）
-- [ ] 数据库服务管理（MySQL / PostgreSQL / Redis）
+[MIT](./LICENSE) © 2026 NovaHub
