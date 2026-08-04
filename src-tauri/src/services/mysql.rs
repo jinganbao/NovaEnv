@@ -84,6 +84,10 @@ pub fn info() -> ServiceInfo {
         let installed = latest_installed();
         let running = installed.as_ref().is_some_and(|v| is_running(v));
         let conf = installed.as_ref().and_then(|v| read_conf(v));
+        let autostart = installed
+            .as_ref()
+            .map(|v| crate::services::launchd::plist_path("mysql", v).exists())
+            .unwrap_or(false);
         ServiceInfo {
             kind: ServiceKind::MySql,
             name: NAME.to_string(),
@@ -93,6 +97,7 @@ pub fn info() -> ServiceInfo {
             port: conf.as_ref().map(|c| c.port).unwrap_or(DEFAULT_PORT),
             pid: installed.as_ref().and_then(|v| read_pid(v)),
             password: conf.map(|c| c.password).unwrap_or_default(),
+            autostart,
             data_dir: installed
                 .as_ref()
                 .map(|v| data_root().join("mysql").join(v).to_string_lossy().into_owned())
@@ -111,6 +116,7 @@ pub fn info() -> ServiceInfo {
             port: DEFAULT_PORT,
             pid: None,
             password: String::new(),
+            autostart: false,
             data_dir: String::new(),
             note: Some("当前平台暂不支持 MySQL（Windows 支持规划中）".to_string()),
         }
@@ -405,9 +411,12 @@ pub fn read_conf(version: &str) -> Option<ServiceConfig> {
 
 // ---------- 进程管理 ----------
 
-/// 启动服务：mysqld 后台拉起（spawn），写 pid，轮询端口就绪
+/// 启动服务：launchd 托管时走 launchctl，否则 mysqld 后台拉起
 #[cfg(target_os = "macos")]
 pub fn start(version: &str) -> Result<(), String> {
+    if autostart_enabled(version) {
+        return crate::services::launchd::start("mysql", version);
+    }
     let mysqld = bin_dir(version).join("mysqld");
     if !mysqld.is_file() {
         return Err(format!("MySQL {version} 未安装"));
@@ -442,9 +451,12 @@ pub fn start(version: &str) -> Result<(), String> {
     Err(format!("MySQL 启动超时（端口 {port} 未就绪），请查看日志"))
 }
 
-/// 停止服务：mysqladmin shutdown（优雅）→ SIGTERM 兜底
+/// 停止服务：launchd 托管时 bootout，否则 mysqladmin shutdown → SIGTERM 兜底
 #[cfg(target_os = "macos")]
 pub fn stop(version: &str) -> Result<(), String> {
+    if autostart_enabled(version) {
+        return crate::services::launchd::stop("mysql", version);
+    }
     if !is_running(version) {
         return Ok(());
     }
@@ -485,12 +497,93 @@ pub fn stop(version: &str) -> Result<(), String> {
 /// 重启
 #[cfg(target_os = "macos")]
 pub fn restart(version: &str) -> Result<(), String> {
+    if autostart_enabled(version) {
+        return crate::services::launchd::restart("mysql", version);
+    }
     let running = is_running(version);
     if running {
         stop(version)?;
         std::thread::sleep(Duration::from_millis(400));
     }
     start(version)
+}
+
+// ---------- 开机自启（launchd） ----------
+
+/// 是否已开启自启（plist 存在）
+#[cfg(target_os = "macos")]
+fn autostart_enabled(version: &str) -> bool {
+    crate::services::launchd::plist_path("mysql", version).exists()
+}
+
+/// 设置/取消开机自启（launchd 托管：RunAtLoad 自启 + KeepAlive 崩溃拉起）
+#[cfg(target_os = "macos")]
+pub fn set_autostart(version: &str, enabled: bool) -> Result<(), String> {
+    let mysqld = bin_dir(version).join("mysqld");
+    if !mysqld.is_file() {
+        return Err(format!("MySQL {version} 未安装"));
+    }
+    if enabled {
+        crate::services::launchd::enable(
+            "mysql",
+            version,
+            &[
+                mysqld.to_string_lossy().into_owned(),
+                format!("--defaults-file={}", conf_file(version).display()),
+            ],
+            &logs_dir().to_string_lossy(),
+        )?;
+        // 原方式运行的旧实例交给 launchd 接管
+        if is_running(version) && !crate::services::launchd::is_loaded("mysql", version) {
+            stop_legacy(version)?;
+            crate::services::launchd::start("mysql", version)?;
+        }
+    } else {
+        crate::services::launchd::disable("mysql", version)?;
+    }
+    Ok(())
+}
+
+/// 非 launchd 方式的停止（供接管使用）
+#[cfg(target_os = "macos")]
+fn stop_legacy(version: &str) -> Result<(), String> {
+    if !is_running(version) {
+        return Ok(());
+    }
+    let conf = read_conf(version).unwrap_or(ServiceConfig {
+        port: DEFAULT_PORT,
+        password: String::new(),
+    });
+    let admin = bin_dir(version).join("mysqladmin");
+    let mut args: Vec<String> = vec![
+        "-u".into(),
+        "root".into(),
+        format!("--socket={}", socket_file(version).display()),
+    ];
+    if !conf.password.is_empty() {
+        args.push(format!("-p{}", conf.password));
+    }
+    args.push("shutdown".into());
+    let _ = Command::new(&admin).args(&args).status();
+    let port = conf.port;
+    for _ in 0..20 {
+        if !is_port_open(port) {
+            let _ = std::fs::remove_file(pid_file(version));
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    if let Some(pid) = read_pid(version) {
+        unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+    }
+    let _ = std::fs::remove_file(pid_file(version));
+    Ok(())
+}
+
+/// 读取服务日志尾部（默认 200 行）
+#[cfg(target_os = "macos")]
+pub fn tail_log(version: &str, lines: usize) -> Result<String, String> {
+    crate::services::tail_log_file(&logs_dir().join(format!("mysql-{version}.log")), lines)
 }
 
 /// 修改运行配置（端口 / 密码）：校验端口 → 重写配置 → 运行中自动重启

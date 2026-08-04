@@ -227,6 +227,53 @@ async fn restart_service(kind: ServiceKind, version: String) -> Result<(), Strin
     .map_err(|e| format!("重启任务异常: {e}"))?
 }
 
+/// 设置/取消服务开机自启（launchd 托管：开机自启 + 崩溃自动拉起）。
+#[tauri::command]
+async fn set_service_autostart(
+    kind: ServiceKind,
+    version: String,
+    enabled: bool,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        {
+            match kind {
+                ServiceKind::Redis => services::redis::set_autostart(&version, enabled),
+                ServiceKind::MySql => services::mysql::set_autostart(&version, enabled),
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (kind, version, enabled);
+            Err("当前平台暂不支持开机自启".to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("自启配置任务异常: {e}"))?
+}
+
+/// 读取服务日志尾部（默认 200 行）。
+#[tauri::command]
+async fn service_logs(kind: ServiceKind, version: String, lines: Option<usize>) -> Result<String, String> {
+    let lines = lines.unwrap_or(200);
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        {
+            match kind {
+                ServiceKind::Redis => services::redis::tail_log(&version, lines),
+                ServiceKind::MySql => services::mysql::tail_log(&version, lines),
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (kind, version, lines);
+            Err("当前平台暂不支持服务日志".to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("日志任务异常: {e}"))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -247,7 +294,9 @@ pub fn run() {
             uninstall_service,
             start_service,
             stop_service,
-            restart_service
+            restart_service,
+            set_service_autostart,
+            service_logs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

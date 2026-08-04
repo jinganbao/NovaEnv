@@ -60,6 +60,10 @@ pub fn info() -> ServiceInfo {
         let installed = latest_installed();
         let running = installed.as_ref().is_some_and(|v| is_running(v));
         let conf = installed.as_ref().and_then(|v| read_conf(v));
+        let autostart = installed
+            .as_ref()
+            .map(|v| crate::services::launchd::plist_path("redis", v).exists())
+            .unwrap_or(false);
         ServiceInfo {
             kind: ServiceKind::Redis,
             name: NAME.to_string(),
@@ -69,6 +73,7 @@ pub fn info() -> ServiceInfo {
             port: conf.as_ref().map(|c| c.port).unwrap_or(DEFAULT_PORT),
             pid: installed.as_ref().and_then(|v| read_pid(v)),
             password: conf.map(|c| c.password).unwrap_or_default(),
+            autostart,
             data_dir: installed
                 .as_ref()
                 .map(|v| data_root().join("redis").join(v).to_string_lossy().into_owned())
@@ -86,6 +91,8 @@ pub fn info() -> ServiceInfo {
             running: false,
             port: DEFAULT_PORT,
             pid: None,
+            password: String::new(),
+            autostart: false,
             data_dir: String::new(),
             note: Some("当前平台暂不支持 Redis（官方无 Windows 发行版）".to_string()),
         }
@@ -482,9 +489,12 @@ pub fn update_config(version: &str, config: &ServiceConfig) -> Result<(), String
 
 // ---------- 进程管理 ----------
 
-/// 启动服务：以配置文件的 daemonize 模式拉起，轮询端口就绪
+/// 启动服务：launchd 托管时走 launchctl，否则 daemonize 配置拉起
 #[cfg(target_os = "macos")]
 pub fn start(version: &str) -> Result<(), String> {
+    if autostart_enabled(version) {
+        return crate::services::launchd::start("redis", version);
+    }
     let server = version_dir(version).join("bin").join("redis-server");
     if !server.is_file() {
         return Err(format!("Redis {version} 未安装"));
@@ -514,9 +524,12 @@ pub fn start(version: &str) -> Result<(), String> {
     Err(format!("Redis 启动超时（端口 {port} 未就绪）"))
 }
 
-/// 停止服务：读 pid → SIGTERM → 等待退出 → SIGKILL 兜底
+/// 停止服务：launchd 托管时 bootout，否则 SIGTERM → SIGKILL 兜底
 #[cfg(target_os = "macos")]
 pub fn stop(version: &str) -> Result<(), String> {
+    if autostart_enabled(version) {
+        return crate::services::launchd::stop("redis", version);
+    }
     if !is_running(version) {
         // 可能只有端口被占（非本服务管理）——不强行处理
         return Ok(());
@@ -545,12 +558,101 @@ pub fn stop(version: &str) -> Result<(), String> {
 /// 重启
 #[cfg(target_os = "macos")]
 pub fn restart(version: &str) -> Result<(), String> {
+    if autostart_enabled(version) {
+        return crate::services::launchd::restart("redis", version);
+    }
     let running = is_running(version);
     if running {
         stop(version)?;
         std::thread::sleep(Duration::from_millis(300));
     }
     start(version)
+}
+
+// ---------- 开机自启（launchd） ----------
+
+/// 是否已开启自启（plist 存在）
+#[cfg(target_os = "macos")]
+fn autostart_enabled(version: &str) -> bool {
+    crate::services::launchd::plist_path("redis", version).exists()
+}
+
+/// 设置/取消开机自启（launchd 托管：RunAtLoad 自启 + KeepAlive 崩溃拉起）
+#[cfg(target_os = "macos")]
+pub fn set_autostart(version: &str, enabled: bool) -> Result<(), String> {
+    let server = version_dir(version).join("bin").join("redis-server");
+    if !server.is_file() {
+        return Err(format!("Redis {version} 未安装"));
+    }
+    if enabled {
+        // launchd 托管要求前台运行：生成 daemonize no 的专用配置
+        let conf = read_conf(version).unwrap_or(ServiceConfig {
+            port: DEFAULT_PORT,
+            password: String::new(),
+        });
+        let launchd_conf = version_dir(version).join("redis.launchd.conf");
+        let data_dir = data_root().join("redis").join(version);
+        let log_file = logs_dir().join(format!("redis-{version}.log"));
+        let mut content = format!(
+            "port {}\ndaemonize no\npidfile {}\ndir {}\nlogfile {}\n",
+            conf.port,
+            pid_file(version).display(),
+            data_dir.display(),
+            log_file.display(),
+        );
+        if !conf.password.is_empty() {
+            content.push_str(&format!("requirepass {}\n", conf.password));
+        }
+        std::fs::write(&launchd_conf, content).map_err(|e| format!("写 launchd 配置失败: {e}"))?;
+
+        crate::services::launchd::enable(
+            "redis",
+            version,
+            &[
+                server.to_string_lossy().into_owned(),
+                launchd_conf.to_string_lossy().into_owned(),
+            ],
+            &logs_dir().to_string_lossy(),
+        )?;
+        // 原方式运行的旧实例交给 launchd 接管
+        if is_running(version) && !crate::services::launchd::is_loaded("redis", version) {
+            stop_legacy(version)?;
+            crate::services::launchd::start("redis", version)?;
+        }
+    } else {
+        crate::services::launchd::disable("redis", version)?;
+        let _ = std::fs::remove_file(version_dir(version).join("redis.launchd.conf"));
+    }
+    Ok(())
+}
+
+/// 非 launchd 方式的停止（供接管/回退使用）
+#[cfg(target_os = "macos")]
+fn stop_legacy(version: &str) -> Result<(), String> {
+    if !is_running(version) {
+        return Ok(());
+    }
+    let Some(pid) = read_pid(version) else {
+        return Ok(());
+    };
+    unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+    let port = read_conf(version).map(|c| c.port).unwrap_or(DEFAULT_PORT);
+    for _ in 0..20 {
+        if !is_port_open(port) {
+            let _ = std::fs::remove_file(pid_file(version));
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    unsafe { libc::kill(pid as i32, libc::SIGKILL) };
+    let _ = std::fs::remove_file(pid_file(version));
+    Ok(())
+}
+
+/// 读取服务日志尾部（默认 200 行）
+#[cfg(target_os = "macos")]
+pub fn tail_log(version: &str, lines: usize) -> Result<String, String> {
+    crate::services::tail_log_file(&logs_dir().join(format!("redis-{version}.log")), lines)
 }
 
 /// 卸载：停止服务 + 删除程序目录（数据目录保留）

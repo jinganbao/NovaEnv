@@ -5,6 +5,8 @@ import {
   installService,
   onServiceProgress,
   restartService,
+  serviceLogs,
+  setServiceAutostart,
   startService,
   stopService,
   uninstallService,
@@ -35,6 +37,57 @@ const installPassword = ref("");
 const editOpen = ref(false);
 const editPort = ref(6379);
 const editPassword = ref("");
+
+// 日志弹窗
+const logOpen = ref(false);
+const logContent = ref("");
+const logLoading = ref(false);
+
+/** 切换开机自启（launchd 托管：开机自启 + 崩溃自动拉起） */
+async function toggleAutostart() {
+  if (busy.value || !props.service.version) return;
+  busy.value = true;
+  result.value = null;
+  try {
+    await setServiceAutostart(
+      props.service.kind,
+      props.service.version,
+      !props.service.autostart,
+    );
+    emit("refresh");
+  } catch (e) {
+    result.value = { ok: false, text: `设置开机自启失败: ${e}` };
+  } finally {
+    busy.value = false;
+  }
+}
+
+/** 查看服务日志（尾部 200 行） */
+async function openLog() {
+  if (!props.service.version) return;
+  logOpen.value = true;
+  logLoading.value = true;
+  logContent.value = "";
+  try {
+    logContent.value = await serviceLogs(props.service.kind, props.service.version);
+  } catch (e) {
+    logContent.value = `读取日志失败: ${e}`;
+  } finally {
+    logLoading.value = false;
+  }
+}
+
+async function refreshLog() {
+  if (!props.service.version) return;
+  logLoading.value = true;
+  try {
+    logContent.value = await serviceLogs(props.service.kind, props.service.version);
+  } catch (e) {
+    logContent.value = `读取日志失败: ${e}`;
+  } finally {
+    logLoading.value = false;
+  }
+}
 
 /** 已安装版本所属大版本（用于行内标注） */
 const installedMajor = computed(() => props.service.version?.split(".")[0] ?? "");
@@ -210,6 +263,23 @@ onUnmounted(() => unlisten?.());
         <span class="svc-val path">{{ service.dataDir }}</span>
       </div>
 
+      <div class="svc-row">
+        <span class="svc-key">开机自启</span>
+        <button
+          class="switch"
+          :class="{ on: service.autostart }"
+          :disabled="busy"
+          role="switch"
+          :aria-checked="service.autostart"
+          @click="toggleAutostart"
+        >
+          <span class="switch-dot"></span>
+        </button>
+        <span class="svc-muted">
+          {{ service.autostart ? "开机自动启动，崩溃自动拉起" : "重启电脑后需手动启动" }}
+        </span>
+      </div>
+
       <div class="svc-actions">
         <button
           v-if="!service.running"
@@ -224,6 +294,7 @@ onUnmounted(() => unlisten?.());
           <button class="btn" :disabled="busy" @click="doRestart">重启</button>
         </template>
         <button class="btn" :disabled="busy" @click="openEdit">修改配置</button>
+        <button class="btn" :disabled="busy" @click="openLog">查看日志</button>
         <button class="btn danger" :disabled="busy" @click="doUninstall">
           卸载
         </button>
@@ -327,6 +398,22 @@ onUnmounted(() => unlisten?.());
           <button class="btn primary" :disabled="busy" @click="saveEdit">
             {{ busy ? "保存中…" : "保存" }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 日志弹窗 -->
+    <div v-if="logOpen" class="modal-mask" @click.self="logOpen = false">
+      <div class="modal modal-log">
+        <div class="log-head">
+          <h3>{{ service.name }} 日志</h3>
+          <button class="btn small" :disabled="logLoading" @click="refreshLog">
+            {{ logLoading ? "加载中…" : "刷新" }}
+          </button>
+        </div>
+        <pre class="log-body">{{ logContent || (logLoading ? "加载中…" : "暂无日志内容") }}</pre>
+        <div class="actions">
+          <button class="btn" @click="logOpen = false">关闭</button>
         </div>
       </div>
     </div>
@@ -528,6 +615,70 @@ onUnmounted(() => unlisten?.());
   justify-content: flex-end;
   gap: 10px;
   margin-top: 6px;
+}
+
+/* 开机自启开关 */
+.switch {
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-input);
+  position: relative;
+  transition: background 0.2s, border-color 0.2s;
+  padding: 0;
+}
+
+.switch.on {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.switch-dot {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+
+.switch.on .switch-dot {
+  transform: translateX(16px);
+}
+
+.btn.small {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+/* 日志弹窗 */
+.modal-log {
+  width: min(720px, 94vw);
+}
+
+.log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.log-body {
+  background: var(--bg-app);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-height: 50vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
 }
 
 .svc-install-row {

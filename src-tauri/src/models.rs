@@ -169,6 +169,8 @@ pub struct ServiceInfo {
     pub pid: Option<u32>,
     /// 当前访问密码（空表示未设置）
     pub password: String,
+    /// 是否开启开机自启（launchd 托管）
+    pub autostart: bool,
     /// 数据目录
     pub data_dir: String,
     /// 平台支持说明（如 Windows 暂不支持）

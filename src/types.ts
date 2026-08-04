@@ -22,6 +22,8 @@ export interface ServiceInfo {
   pid: number | null;
   /** 当前访问密码（空表示未设置） */
   password: string;
+  /** 是否开启开机自启（launchd 托管） */
+  autostart: boolean;
   /** 数据目录 */
   dataDir: string;
   /** 平台支持说明（如 Windows 暂不支持） */

@@ -133,6 +133,24 @@ export function restartService(
   return invoke("restart_service", { kind, version });
 }
 
+/** 设置/取消服务开机自启（launchd：开机自启 + 崩溃自动拉起） */
+export function setServiceAutostart(
+  kind: ServiceKind,
+  version: string,
+  enabled: boolean,
+): Promise<void> {
+  return invoke("set_service_autostart", { kind, version, enabled });
+}
+
+/** 读取服务日志尾部（默认 200 行） */
+export function serviceLogs(
+  kind: ServiceKind,
+  version: string,
+  lines?: number,
+): Promise<string> {
+  return invoke("service_logs", { kind, version, lines: lines ?? 200 });
+}
+
 /** 监听服务安装进度事件，返回取消监听函数 */
 export function onServiceProgress(
   handler: (progress: ServiceProgress) => void,

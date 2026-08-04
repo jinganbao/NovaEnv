@@ -118,6 +118,7 @@ function emptyService(kind: ServiceInfo["kind"]): ServiceInfo {
     port: kind === "mysql" ? 3306 : 6379,
     pid: null,
     password: "",
+    autostart: false,
     dataDir: "",
     note: null,
   };
