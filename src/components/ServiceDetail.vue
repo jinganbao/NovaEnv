@@ -42,6 +42,18 @@ function showToast(ok: boolean, text: string) {
   toastTimer = window.setTimeout(() => (toast.value = null), ok ? 2500 : 5000);
 }
 
+/** 本地乐观运行状态（操作成功立即翻转，避免全量 refresh 导致页面闪烁） */
+const localRunning = ref<Record<string, boolean>>({});
+
+function runningOf(version: string): boolean {
+  return localRunning.value[version] ?? false;
+}
+
+/** 操作成功后延迟后台校准（等 toast 呈现后平滑刷新，消除视觉闪烁） */
+function delayedRefresh(ms = 500) {
+  window.setTimeout(() => emit("refresh"), ms);
+}
+
 // 安装配置（端口/密码）：默认端口取服务实际默认（redis 6379 / mysql 3306）
 const installPort = ref(props.service.port || 6379);
 const installPassword = ref("");
@@ -182,8 +194,9 @@ async function doStart(version: string) {
   result.value = null;
   try {
     await startService(props.service.kind, version);
+    localRunning.value = { ...localRunning.value, [version]: true };
     showToast(true, `${props.service.name} ${version} 已启动`);
-    emit("refresh");
+    delayedRefresh();
   } catch (e) {
     showToast(false, `启动失败: ${e}`);
   } finally {
@@ -199,8 +212,9 @@ async function doStop(version: string) {
   result.value = null;
   try {
     await stopService(props.service.kind, version);
+    localRunning.value = { ...localRunning.value, [version]: false };
     showToast(true, `${props.service.name} ${version} 已停止`);
-    emit("refresh");
+    delayedRefresh();
   } catch (e) {
     showToast(false, `停止失败: ${e}`);
   } finally {
@@ -217,7 +231,7 @@ async function doRestart(version: string) {
   try {
     await restartService(props.service.kind, version);
     showToast(true, `${props.service.name} ${version} 已重启`);
-    emit("refresh");
+    delayedRefresh();
   } catch (e) {
     showToast(false, `重启失败: ${e}`);
   } finally {
@@ -277,10 +291,10 @@ onUnmounted(() => unlisten?.());
         <span
           v-if="service.installed"
           class="badge"
-          :class="service.running ? 'badge-success' : 'badge-warning'"
+          :class="runningOf(service.version ?? '') ? 'badge-success' : 'badge-warning'"
         >
-          <span class="dot" :class="service.running ? 'dot-on' : 'dot-off'"></span>
-          {{ service.running ? "运行中" : "已停止" }}
+          <span class="dot" :class="runningOf(service.version ?? '') ? 'dot-on' : 'dot-off'"></span>
+          {{ runningOf(service.version ?? '') ? "运行中" : "已停止" }}
         </span>
         <span v-else class="badge">未安装</span>
       </div>
@@ -292,9 +306,9 @@ onUnmounted(() => unlisten?.());
       <div v-for="v in service.versions" :key="v.version" class="svc-version-row">
         <span
           class="badge"
-          :class="v.running ? 'badge-running' : 'badge-stopped'"
+          :class="runningOf(v.version) ? 'badge-success' : 'badge-warning'"
         >
-          {{ v.running ? "运行中" : "已停止" }}
+          {{ runningOf(v.version) ? "运行中" : "已停止" }}
         </span>
         <span class="svc-val version">{{ v.version }}</span>
         <span class="svc-muted">端口 {{ v.port }}</span>
@@ -302,7 +316,7 @@ onUnmounted(() => unlisten?.());
 
         <div class="svc-actions">
           <button
-            v-if="!v.running"
+            v-if="!runningOf(v.version)"
             class="btn btn-primary btn-sm"
             :disabled="busy"
             @click="doStart(v.version)"
