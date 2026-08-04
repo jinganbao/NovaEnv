@@ -29,7 +29,10 @@ fn preview_activation(version: RuntimeVersion) -> Result<ActivationPreview, Stri
 /// 执行切换默认版本（写入 shell 配置 / 用户环境变量）。
 #[tauri::command]
 fn activate(version: RuntimeVersion) -> Result<(), String> {
-    activation::activate(&version)
+    let detail = format!("切换默认 {:?} {}", version.kind, version.version);
+    let result = activation::activate(&version);
+    log_result("activate", &detail, &result);
+    result
 }
 
 /// 获取官方源的可安装版本列表（按大版本分组，带 5 分钟缓存）。
@@ -47,15 +50,21 @@ async fn install_version(
     app: tauri::AppHandle,
     request: InstallRequest,
 ) -> Result<InstallResult, String> {
-    tauri::async_runtime::spawn_blocking(move || installer::install(&app, &request))
+    let detail = format!("安装 {:?} {}", request.kind, request.version);
+    let result = tauri::async_runtime::spawn_blocking(move || installer::install(&app, &request))
         .await
-        .map_err(|e| format!("安装任务异常: {e}"))?
+        .map_err(|e| format!("安装任务异常: {e}"))?;
+    app_log("install", &format!("{detail} → {}", if result.is_ok() { "成功" } else { "失败" }));
+    result
 }
 
 /// 卸载 NovaEnv 管理的版本。
 #[tauri::command]
 fn uninstall_version(version: RuntimeVersion) -> Result<(), String> {
-    installer::uninstall(&version)
+    let detail = format!("卸载 {:?} {}", version.kind, version.version);
+    let result = installer::uninstall(&version);
+    log_result("uninstall", &detail, &result);
+    result
 }
 
 /// 获取管理目录信息（路径 / 版本数 / 占用空间）。
@@ -87,7 +96,8 @@ async fn install_service(
     app: tauri::AppHandle,
     request: ServiceInstallRequest,
 ) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let detail = format!("安装服务 {:?} {}", request.kind, request.version);
+    let result = tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "macos")]
         {
             match request.kind {
@@ -114,7 +124,9 @@ async fn install_service(
         }
     })
     .await
-    .map_err(|e| format!("安装任务异常: {e}"))?
+    .map_err(|e| format!("安装任务异常: {e}"))?;
+    app_log("service-install", &format!("{detail} → {}", if result.is_ok() { "成功" } else { "失败" }));
+    result
 }
 
 /// 修改服务运行配置（端口 / 密码）；运行中自动重启生效。
@@ -124,7 +136,8 @@ async fn update_service_config(
     version: String,
     config: ServiceConfig,
 ) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let detail = format!("修改服务配置 {:?} {}", kind, version);
+    let result = tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "macos")]
         {
             match kind {
@@ -139,13 +152,16 @@ async fn update_service_config(
         }
     })
     .await
-    .map_err(|e| format!("配置任务异常: {e}"))?
+    .map_err(|e| format!("配置任务异常: {e}"))?;
+    app_log("service-config", &format!("{detail} → {}", if result.is_ok() { "成功" } else { "失败" }));
+    result
 }
 
 /// 卸载服务（保留数据目录）。
 #[tauri::command]
 async fn uninstall_service(kind: ServiceKind, version: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let detail = format!("卸载服务 {:?} {}", kind, version);
+    let result = tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "macos")]
         {
             match kind {
@@ -160,13 +176,16 @@ async fn uninstall_service(kind: ServiceKind, version: String) -> Result<(), Str
         }
     })
     .await
-    .map_err(|e| format!("卸载任务异常: {e}"))?
+    .map_err(|e| format!("卸载任务异常: {e}"))?;
+    app_log("service-uninstall", &format!("{detail} → {}", if result.is_ok() {"成功"} else {"失败"}));
+    result
 }
 
 /// 启动服务（异步，不阻塞界面）。
 #[tauri::command]
 async fn start_service(kind: ServiceKind, version: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let detail = format!("启动服务 {:?} {}", kind, version);
+    let result = tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "macos")]
         {
             match kind {
@@ -181,13 +200,16 @@ async fn start_service(kind: ServiceKind, version: String) -> Result<(), String>
         }
     })
     .await
-    .map_err(|e| format!("启动任务异常: {e}"))?
+    .map_err(|e| format!("启动任务异常: {e}"))?;
+    app_log("service-start", &format!("{detail} → {}", if result.is_ok() {"成功"} else {"失败"}));
+    result
 }
 
 /// 停止服务（异步，不阻塞界面）。
 #[tauri::command]
 async fn stop_service(kind: ServiceKind, version: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let detail = format!("停止服务 {:?} {}", kind, version);
+    let result = tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "macos")]
         {
             match kind {
@@ -202,13 +224,16 @@ async fn stop_service(kind: ServiceKind, version: String) -> Result<(), String> 
         }
     })
     .await
-    .map_err(|e| format!("停止任务异常: {e}"))?
+    .map_err(|e| format!("停止任务异常: {e}"))?;
+    app_log("service-stop", &format!("{detail} → {}", if result.is_ok() {"成功"} else {"失败"}));
+    result
 }
 
 /// 重启服务（异步，不阻塞界面）。
 #[tauri::command]
 async fn restart_service(kind: ServiceKind, version: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let detail = format!("重启服务 {:?} {}", kind, version);
+    let result = tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "macos")]
         {
             match kind {
@@ -223,7 +248,9 @@ async fn restart_service(kind: ServiceKind, version: String) -> Result<(), Strin
         }
     })
     .await
-    .map_err(|e| format!("重启任务异常: {e}"))?
+    .map_err(|e| format!("重启任务异常: {e}"))?;
+    app_log("service-restart", &format!("{detail} → {}", if result.is_ok() {"成功"} else {"失败"}));
+    result
 }
 
 /// 设置/取消服务开机自启（launchd 托管：开机自启 + 崩溃自动拉起）。
@@ -233,7 +260,8 @@ async fn set_service_autostart(
     version: String,
     enabled: bool,
 ) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let detail = format!("设置开机自启 {:?} {} → {}", kind, version, if enabled { "开启" } else { "关闭" });
+    let result = tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "macos")]
         {
             match kind {
@@ -248,7 +276,9 @@ async fn set_service_autostart(
         }
     })
     .await
-    .map_err(|e| format!("自启配置任务异常: {e}"))?
+    .map_err(|e| format!("自启配置任务异常: {e}"))?;
+    app_log("service-autostart", &format!("{detail} → {}", if result.is_ok() { "成功" } else { "失败" }));
+    result
 }
 
 /// 读取服务日志尾部（默认 200 行）。
@@ -277,8 +307,38 @@ async fn service_logs(
     .map_err(|e| format!("日志任务异常: {e}"))?
 }
 
+// ---------- 应用日志 ----------
+
+/// 应用日志：追加写入 ~/.novaenv/logs/app.log（带时间戳）。
+/// 记录安装/卸载/切换/服务操作与错误，便于问题排查。
+pub(crate) fn app_log(action: &str, detail: &str) {
+    let dir = installer::novaenv_dir().join("logs");
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+    let line = format!("{ts} [{action}] {detail}\n");
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("app.log"))
+    {
+        let _ = f.write_all(line.as_bytes());
+    }
+}
+
+/// 记录 command 结果（成功/失败）
+fn log_result(command: &str, detail: &str, result: &Result<(), String>) {
+    match result {
+        Ok(()) => app_log(command, &format!("{detail} → 成功")),
+        Err(e) => app_log(command, &format!("{detail} → 失败: {e}")),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    app_log("app", &format!("NovaEnv 启动 v{}", env!("CARGO_PKG_VERSION")));
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
