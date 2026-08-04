@@ -88,6 +88,11 @@ fn infer_from_dir_name(dir: &std::path::Path) -> Option<String> {
         }
     }
     // Homebrew node@22 这类只有主版本号，仍可接受
+    if let Some(rest) = name.strip_prefix("node@") {
+        if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
+            return Some(rest.to_string());
+        }
+    }
     crate::runtimes::java::extract_version(&name)
 }
 
@@ -171,4 +176,26 @@ fn candidate_dirs_windows() -> Vec<(PathBuf, &'static str)> {
         }
     }
     dirs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trims_v_prefix() {
+        assert_eq!(trim_v_prefix("v22.11.0"), Some("22.11.0".to_string()));
+        assert_eq!(trim_v_prefix("22.11.0"), Some("22.11.0".to_string()));
+        assert_eq!(trim_v_prefix(""), None);
+    }
+
+    #[test]
+    fn infers_from_dir_names() {
+        let nvm = std::path::Path::new("/Users/x/.nvm/versions/node/v22.11.0");
+        assert_eq!(infer_from_dir_name(nvm), Some("22.11.0".to_string()));
+        let brew = std::path::Path::new("/opt/homebrew/opt/node@22");
+        assert_eq!(infer_from_dir_name(brew), Some("22".to_string()));
+        let plain = std::path::Path::new("/usr/local/node");
+        assert!(infer_from_dir_name(plain).is_none());
+    }
 }

@@ -1015,3 +1015,52 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod tests_core {
+    use super::*;
+    use crate::models::{AvailableVersion, RuntimeKind};
+
+    fn av(version: &str, is_lts: bool) -> AvailableVersion {
+        AvailableVersion {
+            version: version.to_string(),
+            is_lts,
+        }
+    }
+
+    #[test]
+    fn major_of_rules() {
+        assert_eq!(major_of(RuntimeKind::Java, "17.0.12"), "17");
+        assert_eq!(major_of(RuntimeKind::Node, "22.11.0"), "22");
+        assert_eq!(major_of(RuntimeKind::Go, "1.24.3"), "1.24");
+        assert_eq!(major_of(RuntimeKind::Maven, "3.9.16"), "3");
+    }
+
+    #[test]
+    fn groups_by_major_with_lts_merge() {
+        let versions = vec![
+            av("22.11.0", false),
+            av("22.12.0", true),
+            av("24.4.1", false),
+            av("24.4.1", false), // 去重
+        ];
+        let groups = group_versions(RuntimeKind::Node, versions);
+        assert_eq!(groups.len(), 2);
+        let g22 = groups.iter().find(|g| g.major == "22").unwrap();
+        assert!(g22.is_lts);
+        // 组内按版本倒序（最新在前），latest 取首个
+        assert_eq!(g22.versions, vec!["22.12.0", "22.11.0"]);
+        assert_eq!(g22.latest, "22.12.0");
+        let g24 = groups.iter().find(|g| g.major == "24").unwrap();
+        assert!(!g24.is_lts);
+        assert_eq!(g24.versions, vec!["24.4.1"]);
+    }
+
+    #[test]
+    fn managed_path_check() {
+        let dir = installs_dir();
+        let managed = dir.join("node").join("26.6.0");
+        assert!(is_managed(&managed.to_string_lossy()));
+        assert!(!is_managed("/usr/local/node"));
+    }
+}

@@ -155,3 +155,28 @@ fn candidate_dirs_windows() -> Vec<(PathBuf, &'static str)> {
     }
     dirs
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_mvn_version_output() {
+        assert_eq!(
+            parse_mvn_version("Apache Maven 3.9.16 (3f6c2ec2)\nJava version: 25.0.4"),
+            Some("3.9.16".to_string())
+        );
+        assert_eq!(parse_mvn_version("mvn: command not found"), None);
+    }
+
+    #[test]
+    fn infers_from_dir_names() {
+        let d = std::path::Path::new("/Users/x/.novaenv/installs/maven/3.9.16");
+        assert_eq!(infer_from_dir_name(d), Some("3.9.16".to_string()));
+        // brew 目录名无版本号，无法推断（版本依赖 mvn -v）
+        assert_eq!(
+            infer_from_dir_name(std::path::Path::new("/opt/homebrew/opt/maven")),
+            None
+        );
+    }
+}

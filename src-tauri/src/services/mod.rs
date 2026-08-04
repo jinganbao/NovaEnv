@@ -23,3 +23,27 @@ pub fn tail_log_file(path: &std::path::Path, lines: usize) -> Result<String, Str
     let n = all.len().min(lines.max(1));
     Ok(all[all.len() - n..].join("\n"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::tail_log_file;
+    use std::path::PathBuf;
+
+    #[test]
+    fn tails_last_lines() {
+        let path = std::env::temp_dir().join(format!("novaenv-test-log-{}", std::process::id()));
+        let lines: Vec<String> = (0..10).map(|i| format!("line {i}")).collect();
+        std::fs::write(&path, lines.join("\n")).unwrap();
+        let tail = tail_log_file(&path, 3).unwrap();
+        assert_eq!(tail, "line 7\nline 8\nline 9");
+        let all = tail_log_file(&path, 100).unwrap();
+        assert_eq!(all.lines().count(), 10);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn missing_log_errors() {
+        let path: PathBuf = "/nonexistent/novaenv-test.log".into();
+        assert!(tail_log_file(&path, 10).is_err());
+    }
+}

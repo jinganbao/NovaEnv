@@ -226,3 +226,54 @@ pub(crate) fn extract_version(s: &str) -> Option<String> {
     }
     best
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_version_from_dir_names() {
+        assert_eq!(extract_version("jdk-17.0.10+7"), Some("17.0.10".to_string()));
+        // zulu 目录名取最长数字段（安装后目录名以 release 解析的 JAVA_VERSION 为准）
+        assert_eq!(extract_version("zulu25.36.15-ca-jdk25.0.4"), Some("25.36.15".to_string()));
+        assert_eq!(extract_version("8.0.452+8"), Some("8.0.452".to_string()));
+        assert_eq!(extract_version("corretto"), None);
+    }
+
+    #[test]
+    fn parses_java_home_listing() {
+        let output = "\
+17.0.10 (x86_64) \"Eclipse Adoptium\" - \"OpenJDK 17.0.10\" [1] /Library/Java/JavaVirtualMachines/jdk-17.0.10.jdk/Contents/Home
+25.0.4 (arm64) \"Azul Systems, Inc.\" - \"Zulu 25.36.15\" [2] /Library/Java/JavaVirtualMachines/zulu-25.jdk/Contents/Home
+Matching Java Virtual Machines (2):
+";
+        let homes = parse_java_home_v(output);
+        assert_eq!(homes.len(), 2);
+        assert_eq!(homes[0].0, "/Library/Java/JavaVirtualMachines/jdk-17.0.10.jdk/Contents/Home");
+        assert_eq!(homes[0].1, "17.0.10");
+        assert_eq!(homes[1].2, "Azul Systems, Inc.");
+    }
+
+    #[test]
+    fn parses_release_file() {
+        let dir = std::env::temp_dir().join(format!("novaenv-test-java-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("release"),
+            "JAVA_VERSION=\"25.0.4\"\nJAVA_VENDOR=\"Azul Systems, Inc.\"\n",
+        )
+        .unwrap();
+        let (version, vendor) = parse_release(&dir).unwrap();
+        assert_eq!(version, "25.0.4");
+        assert_eq!(vendor, "Azul Systems, Inc.");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn release_file_missing_returns_none() {
+        let dir = std::env::temp_dir().join(format!("novaenv-test-norelease-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(parse_release(&dir).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

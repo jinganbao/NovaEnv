@@ -388,11 +388,24 @@ fn write_conf(version: &str, dest: &Path, config: &ServiceConfig) -> Result<(), 
 #[cfg(target_os = "macos")]
 pub fn read_conf(version: &str) -> Option<ServiceConfig> {
     let content = std::fs::read_to_string(conf_file(version)).ok()?;
+    Some(parse_conf(&content))
+}
+
+/// 解析 my.cnf（纯函数，便于单元测试）：仅解析 [mysqld] 段内的配置
+fn parse_conf(content: &str) -> ServiceConfig {
     let mut port = DEFAULT_PORT;
     let password = String::new();
+    let mut in_mysqld = false;
     for line in content.lines() {
         let line = line.trim();
-        if line.is_empty() || line.starts_with('#') || line.starts_with('[') {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if line.starts_with('[') {
+            in_mysqld = line.trim_start_matches('[').trim_end_matches(']') == "mysqld";
+            continue;
+        }
+        if !in_mysqld {
             continue;
         }
         let Some((key, value)) = line.split_once('=') else {
@@ -405,8 +418,9 @@ pub fn read_conf(version: &str) -> Option<ServiceConfig> {
         }
     }
     // 密码不落盘：通过 mysql 客户端查询
-    Some(ServiceConfig { port, password })
+    ServiceConfig { port, password }
 }
+
 
 // ---------- 进程管理 ----------
 
@@ -733,4 +747,44 @@ fn emit(
             message: message.to_string(),
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::ServiceKind;
+
+    #[test]
+    fn parses_my_cnf() {
+        let conf = parse_conf(
+            "[mysqld]\nport=3307\ndatadir=/x/data\nsocket=/x/run/mysql.sock\nlog_error=/x/log\n",
+        );
+        assert_eq!(conf.port, 3307);
+    }
+
+    #[test]
+    fn defaults_when_missing() {
+        assert_eq!(parse_conf("[mysqld]\ndatadir=/x\n").port, DEFAULT_PORT);
+    }
+
+    #[test]
+    fn ignores_section_and_comments() {
+        assert_eq!(
+            parse_conf("# port=1234\n[client]\nport=9999\n").port,
+            DEFAULT_PORT
+        );
+    }
+
+    #[test]
+    fn version_comparison() {
+        assert!(cmp_versions("8.4.0", "8.4.0").is_eq());
+        assert!(cmp_versions("8.4.1", "8.4.0").is_gt());
+        assert!(cmp_versions("9.0.1", "8.4.6").is_gt());
+    }
+
+    #[test]
+    fn kind_meta() {
+        assert_eq!(ServiceKind::MySql.display_name(), "MySQL");
+        assert_eq!(ServiceKind::MySql.default_port(), 3306);
+    }
 }

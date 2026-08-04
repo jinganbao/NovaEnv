@@ -211,9 +211,8 @@ pub fn available_versions() -> Result<Vec<String>, String> {
     }
 }
 
-/// 解析官方版本目录页
-fn fetch_versions_from_official() -> Result<Vec<String>, String> {
-    let html = crate::installer::http_get_text("https://download.redis.io/releases/")?;
+/// 解析官方版本目录页（纯函数，便于单元测试）
+fn parse_version_html(html: &str) -> Vec<String> {
     let mut versions = Vec::new();
     for (i, _) in html.match_indices("redis-") {
         let rest = &html[i + 6..];
@@ -225,6 +224,8 @@ fn fetch_versions_from_official() -> Result<Vec<String>, String> {
                 break;
             }
         }
+        // 收集可能含尾点（".tar.gz" 前的点），需去掉后再校验
+        let ver = ver.trim_end_matches('.').to_string();
         // 形如 X.Y.Z 且以 .tar.gz 结尾才接受
         if ver.matches('.').count() >= 2
             && rest[ver.len()..].starts_with(".tar.gz")
@@ -233,6 +234,13 @@ fn fetch_versions_from_official() -> Result<Vec<String>, String> {
             versions.push(ver);
         }
     }
+    versions
+}
+
+/// 解析官方版本目录页
+fn fetch_versions_from_official() -> Result<Vec<String>, String> {
+    let html = crate::installer::http_get_text("https://download.redis.io/releases/")?;
+    let mut versions = parse_version_html(&html);
     versions.sort_by(|a, b| cmp_versions(b, a));
     if versions.is_empty() {
         return Err("Redis 版本源未解析到可用版本".to_string());
@@ -488,6 +496,11 @@ fn write_conf(version: &str, dest: &Path, config: &ServiceConfig) -> Result<(), 
 #[cfg(target_os = "macos")]
 pub fn read_conf(version: &str) -> Option<ServiceConfig> {
     let content = std::fs::read_to_string(conf_file(version)).ok()?;
+    Some(parse_conf(&content))
+}
+
+/// 解析 redis.conf（纯函数，便于单元测试）
+fn parse_conf(content: &str) -> ServiceConfig {
     let mut port = DEFAULT_PORT;
     let mut password = String::new();
     for line in content.lines() {
@@ -508,8 +521,9 @@ pub fn read_conf(version: &str) -> Option<ServiceConfig> {
             _ => {}
         }
     }
-    Some(ServiceConfig { port, password })
+    ServiceConfig { port, password }
 }
+
 
 /// 修改运行配置（端口 / 密码）：校验新端口未被占用 → 重写配置 → 运行中自动重启生效
 #[cfg(target_os = "macos")]
@@ -739,4 +753,53 @@ fn emit(
             message: message.to_string(),
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::ServiceKind;
+
+    #[test]
+    fn parses_redis_conf() {
+        let conf = parse_conf(
+            "port 6380\ndaemonize yes\npidfile /x/run/redis.pid\nrequirepass secret123\nsave 900 1\n",
+        );
+        assert_eq!(conf.port, 6380);
+        assert_eq!(conf.password, "secret123");
+    }
+
+    #[test]
+    fn defaults_when_missing() {
+        let conf = parse_conf("daemonize yes\n");
+        assert_eq!(conf.port, DEFAULT_PORT);
+        assert_eq!(conf.password, "");
+    }
+
+    #[test]
+    fn ignores_comments_and_invalid_port() {
+        let conf = parse_conf("# port 9999\nport not-a-number\n");
+        assert_eq!(conf.port, DEFAULT_PORT);
+    }
+
+    #[test]
+    fn version_comparison() {
+        assert!(cmp_versions("8.10.0", "8.8.1").is_gt());
+        assert!(cmp_versions("7.4.4", "8.0.1").is_lt());
+        assert!(cmp_versions("6.2.17", "6.2.17").is_eq());
+    }
+
+    #[test]
+    fn parses_version_list_html() {
+        let html = "<html><a href=\"redis-8.10.0.tar.gz\">..</a>\n<a href=\"redis-7.4.4.tar.gz\">..</a>\n<a href=\"redis-7.4.4.tar.gz\">dup</a>\n<a href=\"redis-8.0.0-alpha.tar.gz\">..</a>\n<a href=\"redis-6.2.17.tar.gz\">..</a></html>";
+        let mut versions = parse_version_html(html);
+        versions.sort_by(|a, b| cmp_versions(b, a));
+        assert_eq!(versions, vec!["8.10.0", "7.4.4", "6.2.17"]);
+    }
+
+    #[test]
+    fn kind_meta() {
+        assert_eq!(ServiceKind::Redis.display_name(), "Redis");
+        assert_eq!(ServiceKind::Redis.default_port(), 6379);
+    }
 }
