@@ -91,6 +91,10 @@ fn shell_lines(version: &RuntimeVersion) -> Vec<String> {
             format!("export MAVEN_HOME=\"{}\"", version.path),
             "export PATH=\"$MAVEN_HOME/bin:$PATH\"".to_string(),
         ],
+        RuntimeKind::Python => vec![
+            format!("export PYTHON_HOME=\"{}\"", version.path),
+            "export PATH=\"$PYTHON_HOME/bin:$PATH\"".to_string(),
+        ],
     }
 }
 

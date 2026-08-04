@@ -50,6 +50,7 @@ fn kind_dir(kind: RuntimeKind) -> &'static str {
         RuntimeKind::Node => "node",
         RuntimeKind::Go => "go",
         RuntimeKind::Maven => "maven",
+        RuntimeKind::Python => "python",
     }
 }
 
@@ -231,7 +232,53 @@ fn download_url(kind: RuntimeKind, version: &str) -> Result<(String, PathBuf), S
                 .ok_or("Maven 各下载源均不可用，请稍后重试")?;
             Ok((url, downloads.join(file)))
         }
+        RuntimeKind::Python => {
+            // python-build-standalone（GitHub Releases，预编译 install_only 包）
+            let url = python_download_url(version)?;
+            let file = format!("cpython-{version}.tar.gz");
+            Ok((url, downloads.join(file)))
+        }
     }
+}
+
+/// Python 下载地址解析：请求 python-build-standalone 最新 release，
+/// 匹配 `cpython-<version>+<tag>-<platform>-install_only.tar.gz` 资产。
+fn python_download_url(version: &str) -> Result<String, String> {
+    let json = http_get_json("https://api.github.com/repos/astral-sh/python-build-standalone/releases?per_page=1")?;
+    let Some(release) = json.as_array().and_then(|a| a.first()) else {
+        return Err("python-build-standalone 响应格式异常".to_string());
+    };
+    let Some(tag) = release.get("tag_name").and_then(|v| v.as_str()) else {
+        return Err("python-build-standalone 响应缺少 tag".to_string());
+    };
+    let Some(assets) = release.get("assets").and_then(|v| v.as_array()) else {
+        return Err("python-build-standalone 响应缺少资产".to_string());
+    };
+    // 平台标识（与上游命名一致）
+    let platform = if cfg!(target_os = "macos") {
+        if cfg!(target_arch = "aarch64") {
+            "aarch64-apple-darwin"
+        } else {
+            "x86_64-apple-darwin"
+        }
+    } else if cfg!(target_os = "windows") {
+        "x86_64-pc-windows-msvc"
+    } else {
+        return Err("当前平台暂不支持 Python 安装".to_string());
+    };
+    let prefix = format!("cpython-{version}+{tag}-{platform}-install_only.tar.gz");
+    for asset in assets {
+        if let Some(name) = asset.get("name").and_then(|v| v.as_str()) {
+            if name == prefix {
+                if let Some(url) = asset.get("browser_download_url").and_then(|v| v.as_str()) {
+                    return Ok(url.to_string());
+                }
+            }
+        }
+    }
+    Err(format!(
+        "未找到 Python {version} 的 {platform} 官方包（可能尚未发布）"
+    ))
 }
 
 /// HEAD 探测 URL 是否可用（镜像源选择用；跟随重定向，最终 200 视为可用）
@@ -390,6 +437,14 @@ fn locate_extracted(
             // apache-maven-3.9.16/ 顶层目录（与 Node 同构）
             let sub = first_subdir(tmp).ok_or("解压结果为空，请重试")?;
             Ok((requested.to_string(), sub))
+        }
+        RuntimeKind::Python => {
+            // install_only 包顶层为 python/ 目录（与 Go 同构）
+            let python_dir = tmp.join("python");
+            if !python_dir.is_dir() {
+                return Err("Python 包结构异常，请重试".to_string());
+            }
+            Ok((requested.to_string(), python_dir))
         }
     }
 }
@@ -559,6 +614,7 @@ pub fn manage_info() -> crate::models::ManageInfo {
         (RuntimeKind::Node, "node"),
         (RuntimeKind::Go, "go"),
         (RuntimeKind::Maven, "maven"),
+        (RuntimeKind::Python, "python"),
     ] {
         let dir = installs.join(dir_name);
         let mut versions = Vec::new();
@@ -648,6 +704,7 @@ pub fn available_versions(
         RuntimeKind::Node => available_node()?,
         RuntimeKind::Go => available_go()?,
         RuntimeKind::Maven => available_maven()?,
+        RuntimeKind::Python => available_python()?,
     };
     let groups = group_versions(kind, flat);
 
@@ -683,6 +740,7 @@ fn kind_name(kind: RuntimeKind) -> &'static str {
         RuntimeKind::Node => "node",
         RuntimeKind::Go => "go",
         RuntimeKind::Maven => "maven",
+        RuntimeKind::Python => "python",
     }
 }
 
@@ -1063,4 +1121,76 @@ mod tests_core {
         assert!(is_managed(&managed.to_string_lossy()));
         assert!(!is_managed("/usr/local/node"));
     }
+}
+
+/// Python 可用版本：python-build-standalone 最新 release 的 install_only 资产
+/// （cpython-3.13.1+20260728-aarch64-apple-darwin-install_only.tar.gz），
+/// 失败回退内置版本表。
+fn available_python() -> Result<Vec<AvailableVersion>, String> {
+    const FALLBACK: &[&str] = &[
+        "3.14.1", "3.13.1", "3.12.8", "3.11.11", "3.10.16", "3.9.20",
+    ];
+    let platform = if cfg!(target_os = "macos") {
+        if cfg!(target_arch = "aarch64") {
+            "aarch64-apple-darwin"
+        } else {
+            "x86_64-apple-darwin"
+        }
+    } else if cfg!(target_os = "windows") {
+        "x86_64-pc-windows-msvc"
+    } else {
+        return Ok(FALLBACK
+            .iter()
+            .map(|v| AvailableVersion {
+                version: v.to_string(),
+                is_lts: false,
+            })
+            .collect());
+    };
+    let suffix = format!("-{platform}-install_only.tar.gz");
+
+    let json = http_get_json(
+        "https://api.github.com/repos/astral-sh/python-build-standalone/releases?per_page=1",
+    )?;
+    let Some(release) = json.as_array().and_then(|a| a.first()) else {
+        return Err("python-build-standalone 响应格式异常".to_string());
+    };
+    let Some(assets) = release.get("assets").and_then(|v| v.as_array()) else {
+        return Err("python-build-standalone 响应缺少资产".to_string());
+    };
+    let mut versions = Vec::new();
+    for asset in assets {
+        let Some(name) = asset.get("name").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let Some(rest) = name.strip_prefix("cpython-") else {
+            continue;
+        };
+        let Some(version) = rest.split('+').next() else {
+            continue;
+        };
+        if name.ends_with(&suffix)
+            && version.matches('.').count() >= 2
+            && !versions
+                .iter()
+                .any(|v: &AvailableVersion| v.version == version)
+        {
+            versions.push(AvailableVersion {
+                version: version.to_string(),
+                is_lts: false,
+            });
+        }
+    }
+    if versions.is_empty() {
+        // 回退内置版本表
+        return Ok(FALLBACK
+            .iter()
+            .map(|v| AvailableVersion {
+                version: v.to_string(),
+                is_lts: false,
+            })
+            .collect());
+    }
+    versions.sort_by(|a, b| compare_versions(&b.version, &a.version));
+    Ok(versions)
 }

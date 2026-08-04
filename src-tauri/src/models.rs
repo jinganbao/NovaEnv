@@ -9,6 +9,7 @@ pub enum RuntimeKind {
     Node,
     Go,
     Maven,
+    Python,
 }
 
 impl RuntimeKind {
@@ -20,6 +21,7 @@ impl RuntimeKind {
             RuntimeKind::Node => "Node.js",
             RuntimeKind::Go => "Go",
             RuntimeKind::Maven => "Maven",
+            RuntimeKind::Python => "Python",
         }
     }
 
@@ -31,6 +33,7 @@ impl RuntimeKind {
             RuntimeKind::Node => "NODE_HOME",
             RuntimeKind::Go => "GOROOT",
             RuntimeKind::Maven => "MAVEN_HOME",
+            RuntimeKind::Python => "PYTHON_HOME",
         }
     }
 }
@@ -117,6 +120,7 @@ pub struct RuntimeOverview {
     pub node: Option<String>,
     pub go: Option<String>,
     pub maven: Option<String>,
+    pub python: Option<String>,
     /// 当前 JAVA_HOME 环境变量值
     pub java_home: Option<String>,
 }
