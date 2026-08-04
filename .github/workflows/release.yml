@@ -62,7 +62,17 @@ jobs:
 
       - name: Lint (clippy)
         working-directory: ./src-tauri
-        run: cargo clippy --all-targets -- -D warnings
+        run: |
+          cargo clippy --all-targets 2>&1 | tee clippy.log
+          if grep -qE '^(warning|error)' clippy.log; then exit 1; fi
+
+      - name: Upload clippy log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clippy-log-${{ matrix.platform }}
+          path: src-tauri/clippy.log
+          if-no-files-found: ignore
 
       - name: Unit tests
         working-directory: ./src-tauri
