@@ -134,10 +134,10 @@ async function doInstall(target: string) {
   }
 }
 
-/** 打开修改配置弹窗（预填当前配置） */
-function openEdit(version: string) {
+/** 打开修改配置弹窗（预填该版本当前端口；密码留空表示不修改） */
+function openEdit(version: string, port: number) {
   editVersion.value = version;
-  editPort.value = 6379;
+  editPort.value = port;
   editPassword.value = "";
   editOpen.value = true;
 }
@@ -284,7 +284,7 @@ onUnmounted(() => unlisten?.());
               重启
             </button>
           </template>
-          <button class="btn small" :disabled="busy" @click="openEdit(v.version)">
+          <button class="btn small" :disabled="busy" @click="openEdit(v.version, v.port)">
             配置
           </button>
           <button class="btn small" :disabled="busy" @click="openLog(v.version)">
@@ -399,7 +399,7 @@ onUnmounted(() => unlisten?.());
           <input
             v-model="editPassword"
             type="password"
-            placeholder="留空表示无密码"
+            placeholder="留空表示不修改密码"
             class="cfg-input"
           />
         </div>

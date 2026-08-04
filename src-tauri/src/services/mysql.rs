@@ -203,19 +203,15 @@ fn read_pid(version: &str) -> Option<u32> {
         .ok()
 }
 
-/// 某版本是否运行中：仅认 NovaEnv 启动的实例（pid 文件 + 进程存活 + 端口开放）
-/// 不靠端口猜测——避免把用户已有的 MySQL（3306）误判为自己的实例
+/// 某版本是否运行中：仅认 NovaEnv 启动的实例（pid 文件 + 进程存活）
+/// 不能再用 conf 端口探测——修改端口后 conf 已变，但进程仍监听启动时端口，
+/// 会导致误判并跳过配置修改后的自动重启
 #[cfg(target_os = "macos")]
 fn is_running(version: &str) -> bool {
     let Some(pid) = read_pid(version) else {
         return false;
     };
-    let alive = unsafe { libc::kill(pid as i32, 0) == 0 };
-    if !alive {
-        return false;
-    }
-    let port = read_conf(version).map(|c| c.port).unwrap_or(DEFAULT_PORT);
-    is_port_open(port)
+    unsafe { libc::kill(pid as i32, 0) == 0 }
 }
 
 /// socket 文件路径（客户端强制走 socket，绝不连到用户已有实例）

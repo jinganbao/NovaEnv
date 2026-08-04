@@ -181,19 +181,15 @@ pub fn is_port_open(port: u16) -> bool {
     std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
 }
 
-/// 某版本是否运行中：仅认 NovaEnv 启动的实例（pid 文件 + 进程存活 + 端口开放）
-/// 不靠端口猜测——避免把用户已有的 Redis（6379）误判为自己的实例
+/// 某版本是否运行中：仅认 NovaEnv 启动的实例（pid 文件 + 进程存活）
+/// 不能再用 conf 端口探测——修改端口后 conf 已变，但进程仍监听启动时端口，
+/// 会导致误判并跳过配置修改后的自动重启
 #[cfg(target_os = "macos")]
 fn is_running(version: &str) -> bool {
     let Some(pid) = read_pid(version) else {
         return false;
     };
-    let alive = unsafe { libc::kill(pid as i32, 0) == 0 };
-    if !alive {
-        return false;
-    }
-    let port = read_conf(version).map(|c| c.port).unwrap_or(DEFAULT_PORT);
-    is_port_open(port)
+    unsafe { libc::kill(pid as i32, 0) == 0 }
 }
 
 #[cfg(target_os = "macos")]
@@ -579,7 +575,12 @@ pub fn update_config(version: &str, config: &ServiceConfig) -> Result<(), String
     if config.port != old.port && is_port_open(config.port) {
         return Err(format!("端口 {} 已被占用，请换一个端口", config.port));
     }
-    write_conf(version, &dir, config)?;
+    // 密码留空 = 不修改（保留旧密码），避免误删已设置密码
+    let mut effective = config.clone();
+    if effective.password.is_empty() {
+        effective.password = old.password.clone();
+    }
+    write_conf(version, &dir, &effective)?;
     // 运行中自动重启使新配置生效
     if is_running(version) {
         restart(version)?;
