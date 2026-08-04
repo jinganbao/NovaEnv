@@ -108,9 +108,8 @@ async function loadVersions() {
     versions.value = await availableServiceVersions(props.service.kind);
   } catch (e) {
     result.value = { ok: false, text: `获取版本列表失败: ${e}` };
-    } finally {
-      loadingVersions.value = false;
-    }
+  } finally {
+    loadingVersions.value = false;
   }
 }
 
