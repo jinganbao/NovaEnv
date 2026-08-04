@@ -336,10 +336,81 @@ fn log_result(command: &str, detail: &str, result: &Result<(), String>) {
     }
 }
 
+// ---------- 启动自检 ----------
+
+/// 启动自检：目录结构就绪 / 清理安装残留 / 配置完整性检查
+fn self_check() {
+    // 1) 标准目录结构（installs / services / data / logs / run）
+    for dir in ["installs", "services", "data", "logs", "run"] {
+        let p = installer::novaenv_dir().join(dir);
+        if let Err(e) = std::fs::create_dir_all(&p) {
+            app_log("self-check", &format!("创建目录失败 {dir}: {e}"));
+        }
+    }
+
+    // 2) 清理安装残留：上次中断留下的解压目录 + 超过 24h 的半成品归档
+    let downloads = installer::installs_dir().join("_downloads");
+    if let Ok(entries) = std::fs::read_dir(&downloads) {
+        let mut removed = 0;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let is_extract_dir = path.is_dir()
+                && path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().starts_with("extract-"))
+                    .unwrap_or(false);
+            if is_extract_dir {
+                if std::fs::remove_dir_all(&path).is_ok() {
+                    removed += 1;
+                }
+                continue;
+            }
+            let is_stale_archive = path
+                .extension()
+                .map(|e| e == "tar.gz" || e == "zip")
+                .unwrap_or(false)
+                && entry
+                    .metadata()
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+                    .map(|t| {
+                        t.elapsed()
+                            .map(|d| d.as_secs() > 24 * 3600)
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false);
+            if is_stale_archive && std::fs::remove_file(&path).is_ok() {
+                removed += 1;
+            }
+        }
+        if removed > 0 {
+            app_log("self-check", &format!("清理安装残留 {removed} 项"));
+        }
+    }
+
+    // 3) ~/.zshrc 管理块完整性检查
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = platform::home_dir() {
+            if let Ok(content) = std::fs::read_to_string(home.join(".zshrc")) {
+                let has_start = content.contains("# >>> NovaEnv managed >>>");
+                let has_end = content.contains("# <<< NovaEnv managed <<<");
+                if has_start && !has_end {
+                    app_log("self-check", "警告：~/.zshrc 管理块缺少结束标记");
+                }
+            }
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     app_log("app", &format!("NovaEnv 启动 v{}", env!("CARGO_PKG_VERSION")));
     tauri::Builder::default()
+        .setup(|_app| {
+            self_check();
+            Ok(())
+        })
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
