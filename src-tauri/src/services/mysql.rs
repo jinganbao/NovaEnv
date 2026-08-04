@@ -12,13 +12,20 @@
 //! - 包名含 macOS 代号（macos14/macos15…），下载时按探测链回退
 //! - Windows：官方有 winx64 包但服务化差异大，首版暂不支持（note 提示）
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+#[cfg(target_os = "macos")]
+use std::path::Path;
+#[cfg(target_os = "macos")]
 use std::process::Command;
+#[cfg(target_os = "macos")]
 use std::time::Duration;
 
+#[cfg(target_os = "macos")]
 use tauri::Emitter;
 
-use crate::models::{ServiceConfig, ServiceInfo, ServiceKind, ServiceProgress};
+use crate::models::{ServiceConfig, ServiceInfo, ServiceKind};
+#[cfg(target_os = "macos")]
+use crate::models::ServiceProgress;
 
 const NAME: &str = "MySQL";
 const DEFAULT_PORT: u16 = 3306;
@@ -30,9 +37,11 @@ const KNOWN_VERSIONS: &[(&str, &str)] = &[
 ];
 
 /// 包名探测回退链（未来版本可能用更新的 macOS 代号）
+#[cfg(target_os = "macos")]
 const MACOS_TAGS: &[&str] = &["macos15", "macos14", "macos13", "macos12"];
 
 /// 服务根目录 ~/.novaenv/services
+#[cfg(target_os = "macos")]
 fn services_dir() -> PathBuf {
     crate::installer::installs_dir()
         .parent()

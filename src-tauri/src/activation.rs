@@ -73,6 +73,7 @@ fn validate(version: &RuntimeVersion) -> Result<(), String> {
 }
 
 /// 依据运行时类型生成 shell 配置行
+#[cfg(target_os = "macos")]
 fn shell_lines(version: &RuntimeVersion) -> Vec<String> {
     match version.kind {
         RuntimeKind::Java => vec![
@@ -100,7 +101,9 @@ fn shell_lines(version: &RuntimeVersion) -> Vec<String> {
 
 // ---------- macOS ----------
 
+#[cfg(target_os = "macos")]
 const BLOCK_START: &str = "# >>> NovaEnv managed >>>";
+#[cfg(target_os = "macos")]
 const BLOCK_END: &str = "# <<< NovaEnv managed <<<";
 
 #[cfg(target_os = "macos")]
@@ -161,6 +164,7 @@ fn activate_macos(version: &RuntimeVersion) -> Result<(), String> {
 }
 
 /// 解析 `export K="V"` 行
+#[cfg(target_os = "macos")]
 fn parse_export(line: &str) -> Option<(String, String)> {
     let rest = line.strip_prefix("export ")?;
     let (k, v) = rest.split_once('=')?;

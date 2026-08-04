@@ -10,19 +10,25 @@
 //! 依赖：Xcode CommandLine Tools（make / cc）。
 //! Windows：官方无 Redis 发行版，暂不支持（note 提示）。
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+#[cfg(target_os = "macos")]
+use std::path::Path;
+#[cfg(target_os = "macos")]
 use std::process::Command;
+#[cfg(target_os = "macos")]
 use std::time::Duration;
 
+#[cfg(target_os = "macos")]
 use tauri::Emitter;
 
-use crate::models::{
-    AvailableVersionGroup, ServiceConfig, ServiceInfo, ServiceKind, ServiceProgress,
-};
+use crate::models::{AvailableVersionGroup, ServiceConfig, ServiceInfo, ServiceKind};
+#[cfg(target_os = "macos")]
+use crate::models::ServiceProgress;
 
 const NAME: &str = "Redis";
 const DEFAULT_PORT: u16 = 6379;
 /// 服务根目录 ~/.novaenv/services
+#[cfg(target_os = "macos")]
 fn services_dir() -> PathBuf {
     crate::installer::installs_dir()
         .parent()

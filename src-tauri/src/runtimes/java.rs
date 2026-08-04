@@ -139,6 +139,7 @@ fn scan_windows() -> Vec<(String, String, String)> {
 // ---------- 公共扫描逻辑 ----------
 
 /// 扫描目录下的 JDK 安装。`home_inside` 表示是否需进入 `Contents/Home`（macOS .jdk 布局）。
+#[cfg(target_os = "macos")]
 fn scan_jdk_dirs(dirs: &[PathBuf], home_inside: bool) -> Vec<(String, String, String)> {
     let mut result = Vec::new();
     for dir in dirs {
@@ -162,6 +163,7 @@ fn scan_jdk_dirs(dirs: &[PathBuf], home_inside: bool) -> Vec<(String, String, St
 }
 
 /// 解析单个 JDK 目录：优先 release 文件，其次目录名兜底。
+#[cfg(target_os = "macos")]
 fn resolve_jdk_home(jdk: &Path, home_inside: bool) -> Option<(String, String, String)> {
     if home_inside {
         let home = jdk.join("Contents").join("Home");

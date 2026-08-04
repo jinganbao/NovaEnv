@@ -18,6 +18,7 @@ pub fn list_all() -> Vec<ServiceInfo> {
 }
 
 /// 读取日志文件尾部（默认 200 行）
+#[cfg(target_os = "macos")]
 pub fn tail_log_file(path: &std::path::Path, lines: usize) -> Result<String, String> {
     let content = std::fs::read_to_string(path).map_err(|e| format!("读取日志失败: {e}"))?;
     let all: Vec<&str> = content.lines().collect();

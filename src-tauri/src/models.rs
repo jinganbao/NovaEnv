@@ -198,12 +198,15 @@ pub struct ServiceInstallRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceConfig {
+    #[allow(dead_code)] // Windows/Linux 分支不读取，macOS 使用
     pub port: u16,
     /// 空字符串表示无密码
+    #[allow(dead_code)] // Windows/Linux 分支不读取，macOS 使用
     pub password: String,
 }
 
 /// 服务安装进度事件（通过 tauri 事件 `service-progress` 推送）
+#[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceProgress {
