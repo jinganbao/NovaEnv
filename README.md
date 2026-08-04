@@ -45,7 +45,7 @@ NovaEnv 是一个基于 Tauri 2 的桌面应用，帮助你像管理包依赖一
 
 ### 从 Release 下载
 
-前往 [Releases](https://github.com/novahub-labs/novaenv/releases) 下载对应平台的安装包：
+前往 [Releases](https://github.com/jinganbao/NovaEnv/releases) 下载对应平台的安装包：
 
 - macOS：`.dmg` / `.app.tar.gz`（Apple Silicon 与 Intel）
 - Windows：`.msi` / `.exe`

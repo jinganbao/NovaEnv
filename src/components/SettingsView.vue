@@ -60,7 +60,7 @@ onMounted(() => {
 
 /** 打开项目主页 */
 function openRepo() {
-  openExternal("https://github.com/novahub-labs/novaenv").catch((e) => {
+  openExternal("https://github.com/jinganbao/NovaEnv").catch((e) => {
     feedback.value = { ok: false, text: `打开链接失败: ${e}` };
   });
 }
@@ -241,7 +241,7 @@ function openRepo() {
       </div>
       <div class="manage-row">
         <span class="row-label">项目主页</span>
-        <button class="link-btn" @click="openRepo">github.com/novahub-labs/novaenv</button>
+        <button class="link-btn" @click="openRepo">github.com/jinganbao/NovaEnv</button>
       </div>
       <p class="about-copy">© 2026 NovaHub · MIT License · 本地环境管理工具</p>
     </section>
