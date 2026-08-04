@@ -467,26 +467,67 @@ fn locate_extracted(
         }
         RuntimeKind::Rust => {
             // 官方包解压后为组件分目录（rustc/ cargo/ rust-std-*/），
-            // 运行 install.sh --prefix 组装成 bin/ + lib/ 标准布局
+            // 先尝试 install.sh --prefix=DIR 组装成 bin/ + lib/ 标准布局，
+            // 失败则手动合并组件目录（兜底）
             let root = first_subdir(tmp).ok_or("解压结果为空，请重试")?;
             let dest = tmp.join("_assembled");
-            let status = std::process::Command::new(root.join("install.sh"))
-                .args(["--prefix"])
-                .arg(&dest)
-                .arg("--disable-ldconfig")
-                .current_dir(&root)
-                .status()
-                .map_err(|e| format!("Rust 组件组装失败: {e}"))?;
-            if !status.success() {
-                return Err("Rust 组件组装失败（install.sh 异常），请重试".to_string());
-            }
+            assemble_rust(&root, &dest)?;
             // 组装后 bin/ 下应有 rustc 与 cargo
-            if !dest.join("bin").join("rustc").is_file() {
-                return Err("Rust 组装结果异常，请重试".to_string());
+            if !dest.join("bin").join("rustc").is_file() || !dest.join("bin").join("cargo").is_file()
+            {
+                return Err("Rust 组装结果异常（缺少 rustc/cargo），请重试".to_string());
             }
             Ok((requested.to_string(), dest))
         }
     }
+}
+
+/// 组装 Rust 官方包组件到目标目录。
+/// 优先运行 install.sh（注意参数须为 `--prefix=DIR` 等号形式）；
+/// 失败时手动合并 rustc/ cargo/ rust-std-*/ 组件（保留可执行权限）。
+fn assemble_rust(root: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
+    let install_sh = root.join("install.sh");
+    if install_sh.is_file() {
+        let ok = std::process::Command::new(&install_sh)
+            .arg(format!("--prefix={}", dest.display()))
+            .arg("--disable-ldconfig")
+            .current_dir(root)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if ok {
+            return Ok(());
+        }
+    }
+    // 兜底：手动合并组件
+    std::fs::create_dir_all(dest).map_err(|e| format!("创建组装目录失败: {e}"))?;
+    let mut merged = false;
+    for entry in std::fs::read_dir(root).map_err(|e| format!("读取包目录失败: {e}"))? {
+        let Ok(entry) = entry else { continue };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name == "rustc" || name == "cargo" || name.starts_with("rust-std-") {
+            copy_tree(&entry.path(), dest)?;
+            merged = true;
+        }
+    }
+    if !merged {
+        return Err("Rust 包内未找到可组装组件".to_string());
+    }
+    Ok(())
+}
+
+/// 递归复制目录树（保留文件权限）
+fn copy_tree(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+    if src.is_dir() {
+        std::fs::create_dir_all(dst).map_err(|e| format!("创建目录失败 {dst:?}: {e}"))?;
+        for entry in std::fs::read_dir(src).map_err(|e| format!("读取目录失败 {src:?}: {e}"))? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            copy_tree(&entry.path(), &dst.join(entry.file_name()))?;
+        }
+    } else {
+        std::fs::copy(src, dst).map_err(|e| format!("复制失败 {src:?}: {e}"))?;
+    }
+    Ok(())
 }
 
 // ---------- 安装 / 卸载主流程 ----------
@@ -512,8 +553,35 @@ pub fn install(
 
     emit_progress(app, kind, &version, "downloading", Some(0), "开始下载");
 
-    // 1) 下载
-    download(app, kind, &version, &url, &archive)?;
+    // 1) 下载（失败自动重试 2 次，应对网络中断导致的文件损坏）
+    let mut last_err = String::new();
+    let mut downloaded = false;
+    for attempt in 0..3 {
+        match download(app, kind, &version, &url, &archive) {
+            Ok(()) => {
+                downloaded = true;
+                break;
+            }
+            Err(e) => {
+                last_err = e;
+                if attempt < 2 {
+                    emit_progress(
+                        app,
+                        kind,
+                        &version,
+                        "downloading",
+                        None,
+                        format!("下载中断，重试第 {} 次…", attempt + 1),
+                    );
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                }
+            }
+        }
+    }
+    if !downloaded {
+        let _ = std::fs::remove_file(&archive);
+        return Err(format!("下载失败: {last_err}"));
+    }
 
     // 2) 解压到临时目录
     let tmp = installs_dir()
@@ -523,7 +591,10 @@ pub fn install(
         std::fs::remove_dir_all(&tmp).map_err(|e| format!("清理临时目录失败: {e}"))?;
     }
     emit_progress(app, kind, &version, "extracting", None, "解压中…");
-    extract(&archive, &tmp)?;
+    extract(&archive, &tmp).map_err(|e| {
+        // 解压失败多为下载文件损坏/磁盘空间不足
+        format!("{e}（可能是下载不完整或磁盘空间不足，请重试）")
+    })?;
 
     // 3) 定位实际内容与最终版本
     let (final_version, src) = locate_extracted(kind, &version, &tmp)?;
