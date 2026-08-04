@@ -5,6 +5,7 @@
 //! 2. 在 `services/` 新建 `<name>.rs` 实现安装/启停逻辑；
 //! 3. 在 `list_all()` 中注册。
 
+#[cfg(target_os = "macos")]
 pub mod launchd;
 pub mod mysql;
 pub mod redis;

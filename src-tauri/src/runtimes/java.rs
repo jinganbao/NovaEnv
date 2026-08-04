@@ -89,6 +89,8 @@ fn scan_macos() -> Vec<(String, String, String)> {
 /// 解析 `/usr/libexec/java_home -V` 输出，形如：
 /// `17.0.10 (x86_64) "Eclipse Adoptium" - "OpenJDK 17.0.10" [1] /Library/Java/.../Contents/Home`
 #[cfg(target_os = "macos")]
+/// 解析 `/usr/libexec/java_home -V` 输出（macOS 专用）
+#[cfg(target_os = "macos")]
 fn parse_java_home_v(output: &str) -> Vec<(String, String, String)> {
     let mut result = Vec::new();
     for line in output.lines() {
@@ -241,6 +243,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn parses_java_home_listing() {
         let output = "\
 17.0.10 (x86_64) \"Eclipse Adoptium\" - \"OpenJDK 17.0.10\" [1] /Library/Java/JavaVirtualMachines/jdk-17.0.10.jdk/Contents/Home

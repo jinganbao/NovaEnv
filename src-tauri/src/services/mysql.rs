@@ -40,6 +40,7 @@ fn services_dir() -> PathBuf {
         .join("services")
 }
 
+#[cfg(target_os = "macos")]
 fn data_root() -> PathBuf {
     crate::installer::installs_dir()
         .parent()
@@ -47,6 +48,7 @@ fn data_root() -> PathBuf {
         .join("data")
 }
 
+#[cfg(target_os = "macos")]
 fn logs_dir() -> PathBuf {
     crate::installer::installs_dir()
         .parent()
@@ -54,6 +56,7 @@ fn logs_dir() -> PathBuf {
         .join("logs")
 }
 
+#[cfg(target_os = "macos")]
 fn run_dir() -> PathBuf {
     crate::installer::installs_dir()
         .parent()
@@ -61,18 +64,22 @@ fn run_dir() -> PathBuf {
         .join("run")
 }
 
+#[cfg(target_os = "macos")]
 fn version_dir(version: &str) -> PathBuf {
     services_dir().join("mysql").join(version)
 }
 
+#[cfg(target_os = "macos")]
 fn pid_file(version: &str) -> PathBuf {
     run_dir().join(format!("mysql-{version}.pid"))
 }
 
+#[cfg(target_os = "macos")]
 fn conf_file(version: &str) -> PathBuf {
     version_dir(version).join("my.cnf")
 }
 
+#[cfg(target_os = "macos")]
 fn bin_dir(version: &str) -> PathBuf {
     version_dir(version).join("bin")
 }

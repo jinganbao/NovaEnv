@@ -31,6 +31,7 @@ fn services_dir() -> PathBuf {
 }
 
 /// 数据根目录 ~/.novaenv/data
+#[cfg(target_os = "macos")]
 fn data_root() -> PathBuf {
     crate::installer::installs_dir()
         .parent()
@@ -39,6 +40,7 @@ fn data_root() -> PathBuf {
 }
 
 /// 日志根目录 ~/.novaenv/logs
+#[cfg(target_os = "macos")]
 fn logs_dir() -> PathBuf {
     crate::installer::installs_dir()
         .parent()
@@ -47,6 +49,7 @@ fn logs_dir() -> PathBuf {
 }
 
 /// PID 根目录 ~/.novaenv/run
+#[cfg(target_os = "macos")]
 fn run_dir() -> PathBuf {
     crate::installer::installs_dir()
         .parent()
@@ -55,14 +58,17 @@ fn run_dir() -> PathBuf {
 }
 
 /// 某版本的安装根目录
+#[cfg(target_os = "macos")]
 fn version_dir(version: &str) -> PathBuf {
     services_dir().join("redis").join(version)
 }
 
+#[cfg(target_os = "macos")]
 fn pid_file(version: &str) -> PathBuf {
     run_dir().join(format!("redis-{version}.pid"))
 }
 
+#[cfg(target_os = "macos")]
 fn conf_file(version: &str) -> PathBuf {
     version_dir(version).join("redis.conf")
 }
