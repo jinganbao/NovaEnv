@@ -72,6 +72,8 @@ const update = useAppUpdate(config, {
 });
 update.autoCheckOnStartup();
 update.loadCurrentVersion();
+/** 当前应用版本（供 Header / 侧边栏展示） */
+const appVersion = computed(() => update.currentVersion.value || "1.0.5");
 
 const counts = computed<Record<RuntimeKind, number>>(() => {
   const c: Record<RuntimeKind, number> = {
@@ -246,7 +248,7 @@ onUnmounted(() => {
           <h1>NovaEnv</h1>
           <p class="subtitle">开发环境可视化管理</p>
         </div>
-        <span class="badge badge-brand">v{{ update.currentVersion || "1.0.5" }}</span>
+        <span class="badge badge-brand">v{{ appVersion }}</span>
       </div>
 
       <div class="header-right">
@@ -285,7 +287,7 @@ onUnmounted(() => {
         :selected="selected"
         :counts="counts"
         :services="services"
-        :version="update.currentVersion.value || '1.0.5'"
+        :version="appVersion"
         @select="selected = $event"
       />
 

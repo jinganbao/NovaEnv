@@ -102,6 +102,11 @@ function metaOf(kind: RuntimeKind | ServiceInfo["kind"]): { letter: string; colo
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
 }
 
 .group-label {
@@ -239,6 +244,8 @@ function metaOf(kind: RuntimeKind | ServiceInfo["kind"]): { letter: string; colo
   gap: var(--space-2);
   border-top: 1px solid var(--border-subtle);
   padding-top: var(--space-3);
+  margin-top: var(--space-2);
+  flex-shrink: 0;
 }
 
 .sidebar-version {
