@@ -102,7 +102,8 @@ function isUpToDate(g: AvailableVersionGroup): boolean {
 }
 
 async function loadVersions() {
-  if (versions.value.length) return; // 已加载过不再重复拉取
+  // 每次拉取（后端有 5 分钟磁盘缓存，开销极小）；
+  // 组件通过 :key 按服务重建，避免版本列表串用
   loadingVersions.value = true;
   try {
     versions.value = await availableServiceVersions(props.service.kind);

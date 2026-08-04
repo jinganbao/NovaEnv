@@ -268,6 +268,7 @@ onUnmounted(() => {
         <SettingsView v-else-if="selected === 'settings'" />
         <ServiceDetail
           v-else-if="selected === 'redis' || selected === 'mysql'"
+          :key="selected"
           :service="serviceOf(selected) ?? emptyService(selected)"
           @refresh="loadServices"
         />
