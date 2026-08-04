@@ -87,12 +87,17 @@ function delayedRefresh(ms = 500) {
 // 安装配置（端口/密码）：默认端口取服务实际默认（redis 6379 / mysql 3306）
 const installPort = ref(props.service.port || 6379);
 const installPassword = ref("");
+/** 密码框明文显示开关 */
+const showPwdInstall = ref(false);
+const showPwdEdit = ref(false);
 
 // 修改配置弹窗（按版本）
 const editOpen = ref(false);
 const editVersion = ref("");
 const editPort = ref(6379);
 const editPassword = ref("");
+/** MySQL 修改密码时的当前密码（用于认证） */
+const editOldPassword = ref("");
 
 // 日志弹窗
 const logOpen = ref(false);
@@ -188,6 +193,7 @@ function openEdit(version: string, port: number) {
   editVersion.value = version;
   editPort.value = port;
   editPassword.value = "";
+  editOldPassword.value = "";
   editOpen.value = true;
 }
 
@@ -200,6 +206,7 @@ async function saveEdit() {
     const config: ServiceConfig = {
       port: editPort.value,
       password: editPassword.value.trim(),
+      oldPassword: editOldPassword.value.trim(),
     };
     await updateServiceConfig(props.service.kind, editVersion.value, config);
     editOpen.value = false;
@@ -351,12 +358,25 @@ onUnmounted(() => unlisten?.());
           </label>
           <label class="cfg-field">
             <span class="cfg-label">密码（可选）</span>
-            <input
-              v-model="installPassword"
-              type="password"
-              placeholder="留空则不设置密码"
-              class="cfg-input"
-            />
+            <div class="pwd-wrap">
+              <input
+                v-model="installPassword"
+                :type="showPwdInstall ? 'text' : 'password'"
+                placeholder="留空则不设置密码"
+                class="cfg-input"
+              />
+              <button
+                class="pwd-toggle"
+                type="button"
+                :title="showPwdInstall ? '隐藏密码' : '显示明文'"
+                @click="showPwdInstall = !showPwdInstall"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path v-if="showPwdInstall" d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                  <path v-else d="M1 1l22 22M10.58 10.58a2 2 0 0 0 2.83 2.83" />
+                </svg>
+              </button>
+            </div>
           </label>
           <label class="cfg-field cfg-version">
             <span class="cfg-label">版本</span>
@@ -495,20 +515,42 @@ onUnmounted(() => unlisten?.());
     <!-- 修改配置弹窗 -->
     <div v-if="editOpen" class="modal-mask" @click.self="!busy && (editOpen = false)">
       <div class="modal">
-        <h3>修改 Redis 配置</h3>
+        <h3>修改 {{ service.name }} 配置</h3>
         <p class="modal-sub">运行中保存后自动重启生效</p>
         <div class="cfg-field">
           <span class="cfg-label">端口</span>
           <input v-model.number="editPort" type="number" min="1" max="65535" class="cfg-input" />
         </div>
-        <div class="cfg-field">
-          <span class="cfg-label">密码</span>
+        <div v-if="service.kind === 'mysql'" class="cfg-field">
+          <span class="cfg-label">当前密码</span>
           <input
-            v-model="editPassword"
-            type="password"
-            placeholder="留空表示不修改密码"
+            v-model="editOldPassword"
+            :type="showPwdEdit ? 'text' : 'password'"
+            placeholder="修改密码时用于认证"
             class="cfg-input"
           />
+        </div>
+        <div class="cfg-field">
+          <span class="cfg-label">新密码</span>
+          <div class="pwd-wrap">
+            <input
+              v-model="editPassword"
+              :type="showPwdEdit ? 'text' : 'password'"
+              placeholder="留空表示不修改密码"
+              class="cfg-input"
+            />
+            <button
+              class="pwd-toggle"
+              type="button"
+              :title="showPwdEdit ? '隐藏密码' : '显示明文'"
+              @click="showPwdEdit = !showPwdEdit"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path v-if="showPwdEdit" d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                <path v-else d="M1 1l22 22M10.58 10.58a2 2 0 0 0 2.83 2.83" />
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="actions">
           <button class="btn" :disabled="busy" @click="editOpen = false">取消</button>
@@ -1217,5 +1259,36 @@ onUnmounted(() => unlisten?.());
   border-top: 1px dashed var(--border-subtle);
   margin-top: 2px;
   flex-wrap: wrap;
+}
+
+/* 密码框 + 明文切换 */
+.pwd-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pwd-wrap .cfg-input {
+  padding-right: 36px;
+  width: 100%;
+}
+
+.pwd-toggle {
+  position: absolute;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  transition: color var(--duration) var(--ease), background var(--duration) var(--ease);
+}
+
+.pwd-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-panel-hover);
 }
 </style>

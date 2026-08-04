@@ -14,6 +14,7 @@ use std::path::PathBuf;
 #[cfg(target_os = "macos")]
 use std::path::Path;
 #[cfg(target_os = "macos")]
+use std::os::unix::process::CommandExt;
 use std::process::Command;
 #[cfg(target_os = "macos")]
 use std::time::Duration;
@@ -398,6 +399,7 @@ pub fn install(
     let config = ServiceConfig {
         port: port.unwrap_or(DEFAULT_PORT),
         password: password.unwrap_or_default(),
+        old_password: String::new(),
     };
     write_conf(version, &dest, &config)?;
 
@@ -553,7 +555,7 @@ fn parse_conf(content: &str) -> ServiceConfig {
             _ => {}
         }
     }
-    ServiceConfig { port, password }
+    ServiceConfig { port, password, old_password: String::new() }
 }
 
 
@@ -570,6 +572,7 @@ pub fn update_config(version: &str, config: &ServiceConfig) -> Result<(), String
     let old = read_conf(version).unwrap_or(ServiceConfig {
         port: DEFAULT_PORT,
         password: String::new(),
+        old_password: String::new(),
     });
     // 新端口与旧端口不同且已被占用 → 冲突
     if config.port != old.port && is_port_open(config.port) {
@@ -616,6 +619,7 @@ pub fn start(version: &str) -> Result<(), String> {
     }
     let status = Command::new(&server)
         .arg(conf.as_os_str())
+        .process_group(0) // 独立进程组，避免 app/终端退出信号波及服务进程
         .status()
         .map_err(|e| format!("启动失败: {e}"))?;
     if !status.success() {
@@ -699,6 +703,7 @@ pub fn set_autostart(version: &str, enabled: bool) -> Result<(), String> {
         let conf = read_conf(version).unwrap_or(ServiceConfig {
             port: DEFAULT_PORT,
             password: String::new(),
+            old_password: String::new(),
         });
         let launchd_conf = version_dir(version).join("redis.launchd.conf");
         let data_dir = data_root().join("redis").join(version);

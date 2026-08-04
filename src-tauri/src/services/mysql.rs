@@ -16,6 +16,7 @@ use std::path::PathBuf;
 #[cfg(target_os = "macos")]
 use std::path::Path;
 #[cfg(target_os = "macos")]
+use std::os::unix::process::CommandExt;
 use std::process::Command;
 #[cfg(target_os = "macos")]
 use std::time::Duration;
@@ -336,6 +337,7 @@ pub fn install(
     let config = ServiceConfig {
         port: port.unwrap_or(DEFAULT_PORT),
         password: password.unwrap_or_default(),
+        old_password: String::new(),
     };
     // 端口冲突检测（避免连到/占用用户已有的 MySQL）
     ensure_port_free(version, config.port)?;
@@ -454,7 +456,7 @@ fn parse_conf(content: &str) -> ServiceConfig {
         }
     }
     // 密码不落盘：通过 mysql 客户端查询
-    ServiceConfig { port, password }
+    ServiceConfig { port, password, old_password: String::new() }
 }
 
 
@@ -490,6 +492,7 @@ pub fn start(version: &str) -> Result<(), String> {
 
     let child = Command::new(&mysqld)
         .args([&format!("--defaults-file={}", conf.display())])
+        .process_group(0) // 独立进程组，避免 app/终端退出信号波及服务进程
         .stdout(std::process::Stdio::from(
             log.try_clone().map_err(|e| format!("日志文件错误: {e}"))?,
         ))
@@ -524,6 +527,7 @@ pub fn stop(version: &str) -> Result<(), String> {
     let conf = read_conf(version).unwrap_or(ServiceConfig {
         port: DEFAULT_PORT,
         password: String::new(),
+        old_password: String::new(),
     });
     // 优雅关闭（走本实例 socket；有密码时携带）
     let admin = bin_dir(version).join("mysqladmin");
@@ -614,6 +618,7 @@ fn stop_legacy(version: &str) -> Result<(), String> {
     let conf = read_conf(version).unwrap_or(ServiceConfig {
         port: DEFAULT_PORT,
         password: String::new(),
+        old_password: String::new(),
     });
     let admin = bin_dir(version).join("mysqladmin");
     let mut args: Vec<String> = vec![
@@ -660,6 +665,7 @@ pub fn update_config(version: &str, config: &ServiceConfig) -> Result<(), String
     let old = read_conf(version).unwrap_or(ServiceConfig {
         port: DEFAULT_PORT,
         password: String::new(),
+        old_password: String::new(),
     });
     if config.port != old.port {
         ensure_port_free(version, config.port)?;
@@ -680,8 +686,14 @@ pub fn update_config(version: &str, config: &ServiceConfig) -> Result<(), String
             "root".to_string(),
             format!("--socket={}", socket_file(version).display()),
         ];
-        if !old.password.is_empty() {
-            args.push(format!("-p{}", old.password));
+        // 旧密码认证：优先取界面输入的当前密码，否则尝试无密码连接
+        let old_pwd = if !config.old_password.is_empty() {
+            config.old_password.clone()
+        } else {
+            old.password.clone()
+        };
+        if !old_pwd.is_empty() {
+            args.push(format!("-p{}", old_pwd));
         }
         args.push("-e".to_string());
         args.push(cmd);

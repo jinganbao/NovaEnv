@@ -219,6 +219,9 @@ pub struct ServiceConfig {
     /// 空字符串表示无密码
     #[allow(dead_code)] // Windows/Linux 分支不读取，macOS 使用
     pub password: String,
+    /// 当前密码（MySQL 修改密码时用于认证；Redis 忽略）
+    #[allow(dead_code)]
+    pub old_password: String,
 }
 
 /// 服务安装进度事件（通过 tauri 事件 `service-progress` 推送）

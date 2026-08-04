@@ -45,6 +45,8 @@ export interface ServiceConfig {
   port: number;
   /** 空字符串表示无密码 */
   password: string;
+  /** 当前密码（MySQL 修改密码时用于认证；Redis 忽略） */
+  oldPassword?: string;
 }
 
 /** 服务安装进度事件 */
