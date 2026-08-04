@@ -19,6 +19,7 @@ function isKind(value: RuntimeKind | "settings"): value is RuntimeKind {
 <template>
   <aside class="sidebar">
     <nav class="nav">
+      <div class="group-label">语言运行时</div>
       <button
         v-for="k in kinds"
         :key="k"
@@ -30,6 +31,12 @@ function isKind(value: RuntimeKind | "settings"): value is RuntimeKind {
         <span class="nav-name">{{ RUNTIME_META[k].name }}</span>
         <span class="nav-count">{{ counts[k] }}</span>
       </button>
+
+      <div class="group-label">服务类组件</div>
+      <div class="nav-empty">
+        <span class="nav-empty-text">暂无已安装服务</span>
+        <span class="nav-empty-sub">Redis / MySQL 支持规划中</span>
+      </div>
     </nav>
 
     <div class="sidebar-foot">
@@ -61,7 +68,40 @@ function isKind(value: RuntimeKind | "settings"): value is RuntimeKind {
 .nav {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+}
+
+.group-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding: 10px 12px 4px;
+}
+
+.group-label:first-child {
+  padding-top: 2px;
+}
+
+.nav-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px 10px;
+  margin-top: 2px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 10px;
+}
+
+.nav-empty-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.nav-empty-sub {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .nav-item {
