@@ -65,15 +65,32 @@ jobs:
         working-directory: ./src-tauri
         run: |
           cargo clippy --all-targets 2>&1 | tee clippy.log
-          if grep -qE '^(warning|error)' clippy.log; then exit 1; fi
 
-      - name: Upload clippy log
-        if: failure()
-        uses: actions/upload-artifact@v4
+      - name: Report lints to annotations
+        if: always()
+        uses: actions/github-script@v7
         with:
-          name: clippy-log-${{ matrix.platform }}
-          path: src-tauri/clippy.log
-          if-no-files-found: ignore
+          script: |
+            const fs = require('fs');
+            const p = '${{ github.workspace }}/src-tauri/clippy.log';
+            const log = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
+            const lines = log.split('\n');
+            const hits = [];
+            lines.forEach((l, i) => {
+              if (/^(warning|error)/.test(l)) hits.push(i);
+            });
+            const detail = hits.slice(0, 25).map(i =>
+              lines.slice(Math.max(0, i - 1), i + 7).join('\n')
+            ).join('\n---\n');
+            if (detail.trim()) {
+              core.error(detail.slice(0, 60000));
+            }
+
+      - name: Fail on lints
+        if: always()
+        working-directory: ./src-tauri
+        run: |
+          if grep -qE '^(warning|error)' clippy.log; then exit 1; fi
 
       - name: Unit tests
         working-directory: ./src-tauri
