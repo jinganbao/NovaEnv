@@ -42,6 +42,9 @@ function showToast(ok: boolean, text: string) {
   toastTimer = window.setTimeout(() => (toast.value = null), ok ? 2500 : 5000);
 }
 
+/** 版本行「更多」展开状态 */
+const expandedVer = ref("");
+
 /** 本地乐观运行状态（操作成功立即翻转，避免全量 refresh 导致页面闪烁） */
 const localRunning = ref<Record<string, boolean>>({});
 
@@ -301,92 +304,17 @@ onUnmounted(() => unlisten?.());
     </div>
     <p v-if="service.note" class="svc-note">{{ service.note }}</p>
 
-    <!-- 已安装版本列表（多版本支持） -->
-    <div v-if="service.installed" class="svc-card">
-      <div v-for="v in service.versions" :key="v.version" class="svc-version-row">
-        <span
-          class="badge"
-          :class="runningOf(v.version) ? 'badge-success' : 'badge-warning'"
-        >
-          {{ runningOf(v.version) ? "运行中" : "已停止" }}
-        </span>
-        <span class="svc-val version">{{ v.version }}</span>
-        <span class="svc-muted">端口 {{ v.port }}</span>
-        <span v-if="v.autostart" class="badge badge-autostart">自启</span>
-
-        <div class="svc-actions">
-          <button
-            v-if="!runningOf(v.version)"
-            class="btn btn-primary btn-sm"
-            :disabled="busy"
-            @click="doStart(v.version)"
-          >
-            {{ acting?.version === v.version && acting?.action === 'start' ? '启动中…' : '启动' }}
-          </button>
-          <template v-else>
-            <button class="btn btn-sm" :disabled="busy" @click="doStop(v.version)">
-              {{ acting?.version === v.version && acting?.action === 'stop' ? '停止中…' : '停止' }}
-            </button>
-            <button class="btn btn-sm" :disabled="busy" @click="doRestart(v.version)">
-              {{ acting?.version === v.version && acting?.action === 'restart' ? '重启中…' : '重启' }}
-            </button>
-          </template>
-          <button class="btn small" :disabled="busy" @click="openEdit(v.version, v.port)">
-            配置
-          </button>
-          <button class="btn small" :disabled="busy" @click="openLog(v.version)">
-            日志
-          </button>
-          <button
-            class="btn small"
-            :disabled="busy"
-            @click="toggleAutostart(v.version, v.autostart)"
-          >
-            {{ v.autostart ? "取消自启" : "开机自启" }}
-          </button>
-          <button class="btn small danger" :disabled="busy" @click="doUninstall(v.version)">
-            卸载
-          </button>
-        </div>
-      </div>
-      <p class="svc-muted svc-data-tip">
-        数据目录：{{ service.dataDir }}
-      </p>
-    </div>
-
-    <!-- 安装面板：按大版本分组（始终可见，支持安装多个版本并存） -->
-    <div class="svc-card">
+    <!-- 安装面板：按大版本分组（置于列表上方，端口/密码配置始终可见） -->
+    <div class="svc-card install-panel">
       <div class="svc-install">
-        <p class="svc-install-tip">
-          {{
-            service.installed
-              ? `安装其他版本（当前已安装：${installedText}）`
-              : `安装 ${service.name}（自动下载源码并编译，约 1-2 分钟）`
-          }}
-        </p>
-        <div v-if="loadingVersions" class="svc-muted">正在获取版本列表…</div>
-        <div v-else-if="versions.length" class="svc-groups">
-          <div v-for="g in versions" :key="g.major" class="svc-group-row">
-            <span class="svc-major">{{ service.name }} {{ g.major }}</span>
-            <span class="svc-val">{{ g.latest }}</span>
-            <span
-              v-if="installedMajor === g.major"
-              class="badge"
-              :class="isUpToDate(g) ? 'badge-stopped' : 'badge-upgrade'"
-            >
-              {{ isUpToDate(g) ? "已是最新" : "有新版本" }}
-            </span>
-            <button
-              v-if="!isUpToDate(g)"
-              class="btn primary small"
-              :disabled="busy"
-              @click="doInstall(g.latest)"
-            >
-              {{ `安装 ${g.latest}` }}
-            </button>
-            <span v-else class="svc-muted">已安装 {{ installedText }}</span>
-          </div>
-
+        <div class="install-head">
+          <p class="svc-install-tip">
+            {{
+              service.installed
+                ? `安装其他版本（当前已安装：${installedText}）`
+                : `安装 ${service.name}（自动下载源码并编译，约 1-2 分钟）`
+            }}
+          </p>
           <!-- 安装配置：端口 / 密码 -->
           <div class="svc-config">
             <label class="cfg-field">
@@ -410,7 +338,100 @@ onUnmounted(() => unlisten?.());
             </label>
           </div>
         </div>
+        <div v-if="loadingVersions" class="svc-muted">正在获取版本列表…</div>
+        <div v-else-if="versions.length" class="svc-groups">
+          <div v-for="g in versions" :key="g.major" class="svc-group-row">
+            <span class="svc-major">{{ service.name }} {{ g.major }}</span>
+            <span class="svc-val">{{ g.latest }}</span>
+            <span
+              v-if="installedMajor === g.major"
+              class="badge"
+              :class="isUpToDate(g) ? 'badge-stopped' : 'badge-upgrade'"
+            >
+              {{ isUpToDate(g) ? "已是最新" : "有新版本" }}
+            </span>
+            <button
+              v-if="!isUpToDate(g)"
+              class="btn btn-primary btn-sm"
+              :disabled="busy"
+              @click="doInstall(g.latest)"
+            >
+              {{ `安装 ${g.latest}` }}
+            </button>
+            <span v-else class="svc-muted">已安装 {{ installedText }}</span>
+          </div>
+        </div>
       </div>
+    </div>
+
+    <!-- 已安装版本列表（多版本支持，紧凑行 + 更多操作） -->
+    <div v-if="service.installed" class="svc-card">
+      <div class="installed-head">
+        <span class="installed-title">已安装版本</span>
+        <span class="svc-muted">{{ service.versions.length }} 个</span>
+      </div>
+      <div v-for="v in service.versions" :key="v.version" class="svc-version-row">
+        <span
+          class="run-dot"
+          :class="runningOf(v.version) ? 'run-dot-on' : 'run-dot-off'"
+        ></span>
+        <span class="svc-val version">{{ v.version }}</span>
+        <span class="svc-muted">端口 {{ v.port }}</span>
+        <span v-if="v.autostart" class="badge badge-brand badge-tiny">自启</span>
+
+        <div class="svc-actions">
+          <button
+            v-if="!runningOf(v.version)"
+            class="btn btn-primary btn-sm"
+            :disabled="busy"
+            @click="doStart(v.version)"
+          >
+            {{ acting?.version === v.version && acting?.action === 'start' ? '启动中…' : '启动' }}
+          </button>
+          <template v-else>
+            <button class="btn btn-sm" :disabled="busy" @click="doStop(v.version)">
+              {{ acting?.version === v.version && acting?.action === 'stop' ? '停止中…' : '停止' }}
+            </button>
+          </template>
+          <button
+            class="btn btn-sm btn-more"
+            :class="{ open: expandedVer === v.version }"
+            :disabled="busy"
+            @click="expandedVer = expandedVer === v.version ? '' : v.version"
+          >
+            {{ expandedVer === v.version ? "收起" : "更多" }}
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path :d="expandedVer === v.version ? 'M18 15l-6-6-6 6' : 'M6 9l6 6 6-6'" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- 更多操作（展开） -->
+        <div v-if="expandedVer === v.version" class="ver-more">
+          <button class="btn btn-sm" :disabled="busy" @click="doRestart(v.version)">
+            {{ acting?.version === v.version && acting?.action === 'restart' ? '重启中…' : '重启' }}
+          </button>
+          <button class="btn btn-sm" :disabled="busy" @click="openEdit(v.version, v.port)">
+            配置
+          </button>
+          <button class="btn btn-sm" :disabled="busy" @click="openLog(v.version)">
+            日志
+          </button>
+          <button
+            class="btn btn-sm"
+            :disabled="busy"
+            @click="toggleAutostart(v.version, v.autostart)"
+          >
+            {{ v.autostart ? "取消自启" : "开机自启" }}
+          </button>
+          <button class="btn btn-sm btn-danger" :disabled="busy" @click="doUninstall(v.version)">
+            卸载
+          </button>
+        </div>
+      </div>
+      <p class="svc-muted svc-data-tip">
+        数据目录：{{ service.dataDir }}
+      </p>
     </div>
 
     <!-- 安装进度 -->
@@ -976,5 +997,85 @@ onUnmounted(() => unlisten?.());
 .toast-leave-to {
   opacity: 0;
   transform: translateY(-6px);
+}
+
+/* ---- 安装面板（列表上方） ---- */
+.install-panel {
+  border-color: var(--border-strong);
+}
+
+.install-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.svc-config {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-end;
+}
+
+/* ---- 已安装版本列表 ---- */
+.installed-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 8px;
+}
+
+.installed-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.run-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
+}
+
+.run-dot-on {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft);
+}
+
+.run-dot-off {
+  background: var(--text-muted);
+}
+
+.badge-tiny {
+  padding: 1px 7px;
+  font-size: 10px;
+}
+
+.btn-more {
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-more.open {
+  color: var(--brand);
+  border-color: var(--brand);
+}
+
+/* 更多操作展开条 */
+.ver-more {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px 12px 42px;
+  border-top: 1px dashed var(--border-subtle);
+  background: var(--bg-app);
+  flex-wrap: wrap;
 }
 </style>
