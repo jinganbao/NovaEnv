@@ -640,10 +640,10 @@ pub fn stop(version: &str) -> Result<(), String> {
     };
     // SIGTERM
     unsafe { libc::kill(pid as i32, libc::SIGTERM) };
-    let port = read_conf(version).map(|c| c.port).unwrap_or(DEFAULT_PORT);
-    // 优雅关闭通常 1-2 秒；4 秒（20×200ms）未关闭则 SIGKILL 兜底
+    // 优雅关闭通常 1-2 秒；4 秒（20×200ms）进程未退出则 SIGKILL 兜底
+    // 完成判断用进程存活（不用端口——改端口后 conf 端口≠进程实际端口）
     for _ in 0..20 {
-        if !is_port_open(port) {
+        if !is_running(version) {
             // 清理残留 pid 文件
             let _ = std::fs::remove_file(pid_file(version));
             return Ok(());

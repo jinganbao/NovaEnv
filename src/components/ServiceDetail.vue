@@ -26,9 +26,21 @@ const emit = defineEmits<{ (e: "refresh"): void }>();
 const versions = ref<AvailableVersionGroup[]>([]);
 const loadingVersions = ref(false);
 const busy = ref(false);
+/** 正在执行的操作（版本 → 动作），用于按钮文案反馈 */
+const acting = ref<{ version: string; action: "start" | "stop" | "restart" } | null>(null);
 const result = ref<{ ok: boolean; text: string } | null>(null);
+let resultTimer: number | undefined;
 const progress = ref<ServiceProgress | null>(null);
 let unlisten: (() => void) | null = null;
+
+/** 显示操作结果（成功 3 秒自动消失，失败常驻） */
+function showResult(ok: boolean, text: string) {
+  result.value = { ok, text };
+  window.clearTimeout(resultTimer);
+  if (ok) {
+    resultTimer = window.setTimeout(() => (result.value = null), 3000);
+  }
+}
 
 // 安装配置（端口/密码）：默认端口取服务实际默认（redis 6379 / mysql 3306）
 const installPort = ref(props.service.port || 6379);
@@ -166,42 +178,51 @@ async function saveEdit() {
 async function doStart(version: string) {
   if (busy.value || !version) return;
   busy.value = true;
+  acting.value = { version, action: "start" };
   result.value = null;
   try {
     await startService(props.service.kind, version);
+    showResult(true, `${props.service.name} ${version} 已启动`);
     emit("refresh");
   } catch (e) {
-    result.value = { ok: false, text: `启动失败: ${e}` };
+    showResult(false, `启动失败: ${e}`);
   } finally {
     busy.value = false;
+    acting.value = null;
   }
 }
 
 async function doStop(version: string) {
   if (busy.value || !version) return;
   busy.value = true;
+  acting.value = { version, action: "stop" };
   result.value = null;
   try {
     await stopService(props.service.kind, version);
+    showResult(true, `${props.service.name} ${version} 已停止`);
     emit("refresh");
   } catch (e) {
-    result.value = { ok: false, text: `停止失败: ${e}` };
+    showResult(false, `停止失败: ${e}`);
   } finally {
     busy.value = false;
+    acting.value = null;
   }
 }
 
 async function doRestart(version: string) {
   if (busy.value || !version) return;
   busy.value = true;
+  acting.value = { version, action: "restart" };
   result.value = null;
   try {
     await restartService(props.service.kind, version);
+    showResult(true, `${props.service.name} ${version} 已重启`);
     emit("refresh");
   } catch (e) {
-    result.value = { ok: false, text: `重启失败: ${e}` };
+    showResult(false, `重启失败: ${e}`);
   } finally {
     busy.value = false;
+    acting.value = null;
   }
 }
 
@@ -270,18 +291,18 @@ onUnmounted(() => unlisten?.());
         <div class="svc-actions">
           <button
             v-if="!v.running"
-            class="btn primary small"
+            class="btn btn-primary btn-sm"
             :disabled="busy"
             @click="doStart(v.version)"
           >
-            启动
+            {{ acting?.version === v.version && acting?.action === 'start' ? '启动中…' : '启动' }}
           </button>
           <template v-else>
-            <button class="btn small" :disabled="busy" @click="doStop(v.version)">
-              停止
+            <button class="btn btn-sm" :disabled="busy" @click="doStop(v.version)">
+              {{ acting?.version === v.version && acting?.action === 'stop' ? '停止中…' : '停止' }}
             </button>
-            <button class="btn small" :disabled="busy" @click="doRestart(v.version)">
-              重启
+            <button class="btn btn-sm" :disabled="busy" @click="doRestart(v.version)">
+              {{ acting?.version === v.version && acting?.action === 'restart' ? '重启中…' : '重启' }}
             </button>
           </template>
           <button class="btn small" :disabled="busy" @click="openEdit(v.version, v.port)">
