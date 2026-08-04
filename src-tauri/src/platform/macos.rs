@@ -33,7 +33,14 @@ pub fn active_config_paths() -> Vec<String> {
 pub fn parse_active_config(content: &str) -> Vec<String> {
     const BLOCK_START: &str = "# >>> NovaEnv managed >>>";
     const BLOCK_END: &str = "# <<< NovaEnv managed <<<";
-    const VARS: [&str; 5] = ["JAVA_HOME", "NODE_HOME", "GOROOT", "MAVEN_HOME", "PYTHON_HOME"];
+    const VARS: [&str; 6] = [
+        "JAVA_HOME",
+        "NODE_HOME",
+        "GOROOT",
+        "MAVEN_HOME",
+        "PYTHON_HOME",
+        "RUST_HOME",
+    ];
 
     let mut in_block = false;
     let mut paths = Vec::new();

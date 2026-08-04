@@ -11,6 +11,7 @@ pub mod java;
 pub mod maven;
 pub mod node;
 pub mod python;
+pub mod rust;
 
 use crate::adapter::RuntimeAdapter;
 use crate::models::{RuntimeKind, RuntimeOverview, RuntimesPayload};
@@ -23,6 +24,7 @@ pub fn all() -> Vec<Box<dyn RuntimeAdapter>> {
         Box::new(go::GoAdapter),
         Box::new(maven::MavenAdapter),
         Box::new(python::PythonAdapter),
+        Box::new(rust::RustAdapter),
     ]
 }
 
@@ -49,6 +51,7 @@ fn overview() -> RuntimeOverview {
             RuntimeKind::Go => overview.go = active,
             RuntimeKind::Maven => overview.maven = active,
             RuntimeKind::Python => overview.python = active,
+            RuntimeKind::Rust => overview.rust = active,
         }
     }
     overview.java_home = std::env::var("JAVA_HOME").ok();

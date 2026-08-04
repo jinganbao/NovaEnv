@@ -96,6 +96,10 @@ fn shell_lines(version: &RuntimeVersion) -> Vec<String> {
             format!("export PYTHON_HOME=\"{}\"", version.path),
             "export PATH=\"$PYTHON_HOME/bin:$PATH\"".to_string(),
         ],
+        RuntimeKind::Rust => vec![
+            format!("export RUST_HOME=\"{}\"", version.path),
+            "export PATH=\"$RUST_HOME/bin:$PATH\"".to_string(),
+        ],
     }
 }
 

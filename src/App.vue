@@ -26,7 +26,7 @@ import SettingsView from "./components/SettingsView.vue";
 import Sidebar from "./components/Sidebar.vue";
 import UninstallModal from "./components/UninstallModal.vue";
 
-const kinds: RuntimeKind[] = ["java", "node", "go", "maven", "python"];
+const kinds: RuntimeKind[] = ["java", "node", "go", "maven", "python", "rust"];
 const serviceKinds = ["redis", "mysql"] as const;
 
 type Selected = RuntimeKind | (typeof serviceKinds)[number] | "settings";
@@ -82,6 +82,7 @@ const counts = computed<Record<RuntimeKind, number>>(() => {
     go: 0,
     maven: 0,
     python: 0,
+    rust: 0,
   };
   for (const v of payload.value?.versions ?? []) c[v.kind]++;
   return c;

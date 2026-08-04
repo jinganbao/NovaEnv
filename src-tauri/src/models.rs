@@ -10,6 +10,7 @@ pub enum RuntimeKind {
     Go,
     Maven,
     Python,
+    Rust,
 }
 
 impl RuntimeKind {
@@ -22,6 +23,7 @@ impl RuntimeKind {
             RuntimeKind::Go => "Go",
             RuntimeKind::Maven => "Maven",
             RuntimeKind::Python => "Python",
+            RuntimeKind::Rust => "Rust",
         }
     }
 
@@ -34,6 +36,7 @@ impl RuntimeKind {
             RuntimeKind::Go => "GOROOT",
             RuntimeKind::Maven => "MAVEN_HOME",
             RuntimeKind::Python => "PYTHON_HOME",
+            RuntimeKind::Rust => "RUST_HOME",
         }
     }
 }
@@ -121,6 +124,7 @@ pub struct RuntimeOverview {
     pub go: Option<String>,
     pub maven: Option<String>,
     pub python: Option<String>,
+    pub rust: Option<String>,
     /// 当前 JAVA_HOME 环境变量值
     pub java_home: Option<String>,
 }

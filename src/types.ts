@@ -1,6 +1,6 @@
 // 与 Rust 后端 models.rs 对应的类型定义（serde camelCase 契约）
 
-export type RuntimeKind = "java" | "node" | "go" | "maven" | "python";
+export type RuntimeKind = "java" | "node" | "go" | "maven" | "python" | "rust";
 
 /** 服务类组件类型 */
 export type ServiceKind = "redis" | "mysql";
@@ -120,6 +120,7 @@ export interface RuntimeOverview {
   go: string | null;
   maven: string | null;
   python: string | null;
+  rust: string | null;
   javaHome: string | null;
 }
 
@@ -149,6 +150,7 @@ export const RUNTIME_META: Record<
   go: { name: "Go", icon: "🐹", desc: "Go 编程语言", letter: "G", color: "linear-gradient(135deg,#38bdf8,#0891b2)" },
   maven: { name: "Maven", icon: "📦", desc: "Java 构建工具", letter: "M", color: "linear-gradient(135deg,#f87171,#dc2626)" },
   python: { name: "Python", icon: "🐍", desc: "Python 解释器", letter: "P", color: "linear-gradient(135deg,#60a5fa,#2563eb)" },
+  rust: { name: "Rust", icon: "🦀", desc: "Rust 编程语言", letter: "R", color: "linear-gradient(135deg,#f97316,#c2410c)" },
 };
 
 /** 服务展示元信息（品牌色与字母） */

@@ -51,6 +51,7 @@ fn kind_dir(kind: RuntimeKind) -> &'static str {
         RuntimeKind::Go => "go",
         RuntimeKind::Maven => "maven",
         RuntimeKind::Python => "python",
+        RuntimeKind::Rust => "rust",
     }
 }
 
@@ -237,6 +238,24 @@ fn download_url(kind: RuntimeKind, version: &str) -> Result<(String, PathBuf), S
             let url = python_download_url(version)?;
             let file = format!("cpython-{version}.tar.gz");
             Ok((url, downloads.join(file)))
+        }
+        RuntimeKind::Rust => {
+            // Rust 官方 dist（static.rust-lang.org，预编译 toolchain 包）
+            let target = if cfg!(target_os = "macos") {
+                if cfg!(target_arch = "aarch64") {
+                    "aarch64-apple-darwin"
+                } else {
+                    "x86_64-apple-darwin"
+                }
+            } else if cfg!(target_os = "windows") {
+                "x86_64-pc-windows-msvc"
+            } else {
+                return Err("当前平台暂不支持 Rust 安装".to_string());
+            };
+            let url = format!(
+                "https://static.rust-lang.org/dist/rust-{version}-{target}.tar.gz"
+            );
+            Ok((url, downloads.join(format!("rust-{version}-{target}.tar.gz"))))
         }
     }
 }
@@ -446,6 +465,27 @@ fn locate_extracted(
             }
             Ok((requested.to_string(), python_dir))
         }
+        RuntimeKind::Rust => {
+            // 官方包解压后为组件分目录（rustc/ cargo/ rust-std-*/），
+            // 运行 install.sh --prefix 组装成 bin/ + lib/ 标准布局
+            let root = first_subdir(tmp).ok_or("解压结果为空，请重试")?;
+            let dest = tmp.join("_assembled");
+            let status = std::process::Command::new(root.join("install.sh"))
+                .args(["--prefix"])
+                .arg(&dest)
+                .arg("--disable-ldconfig")
+                .current_dir(&root)
+                .status()
+                .map_err(|e| format!("Rust 组件组装失败: {e}"))?;
+            if !status.success() {
+                return Err("Rust 组件组装失败（install.sh 异常），请重试".to_string());
+            }
+            // 组装后 bin/ 下应有 rustc 与 cargo
+            if !dest.join("bin").join("rustc").is_file() {
+                return Err("Rust 组装结果异常，请重试".to_string());
+            }
+            Ok((requested.to_string(), dest))
+        }
     }
 }
 
@@ -615,6 +655,7 @@ pub fn manage_info() -> crate::models::ManageInfo {
         (RuntimeKind::Go, "go"),
         (RuntimeKind::Maven, "maven"),
         (RuntimeKind::Python, "python"),
+        (RuntimeKind::Rust, "rust"),
     ] {
         let dir = installs.join(dir_name);
         let mut versions = Vec::new();
@@ -705,6 +746,7 @@ pub fn available_versions(
         RuntimeKind::Go => available_go()?,
         RuntimeKind::Maven => available_maven()?,
         RuntimeKind::Python => available_python()?,
+        RuntimeKind::Rust => available_rust()?,
     };
     let groups = group_versions(kind, flat);
 
@@ -741,6 +783,7 @@ fn kind_name(kind: RuntimeKind) -> &'static str {
         RuntimeKind::Go => "go",
         RuntimeKind::Maven => "maven",
         RuntimeKind::Python => "python",
+        RuntimeKind::Rust => "rust",
     }
 }
 
@@ -1188,6 +1231,42 @@ fn available_python() -> Result<Vec<AvailableVersion>, String> {
     }
     if versions.is_empty() {
         // 回退内置版本表
+        return Ok(FALLBACK
+            .iter()
+            .map(|v| AvailableVersion {
+                version: v.to_string(),
+                is_lts: false,
+            })
+            .collect());
+    }
+    versions.sort_by(|a, b| compare_versions(&b.version, &a.version));
+    Ok(versions)
+}
+
+/// Rust 可用版本：rust-lang/rust GitHub Releases（stable 版本号），
+/// 失败回退内置版本表。
+fn available_rust() -> Result<Vec<AvailableVersion>, String> {
+    const FALLBACK: &[&str] = &["1.97.1", "1.96.0", "1.95.1", "1.94.0", "1.93.1"];
+    let json = http_get_json(
+        "https://api.github.com/repos/rust-lang/rust/releases?per_page=60",
+    )?;
+    let Some(arr) = json.as_array() else {
+        return Err("rust-lang/rust 响应格式异常".to_string());
+    };
+    let mut versions = Vec::new();
+    for release in arr {
+        let Some(tag) = release.get("tag_name").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        // 只接受形如 1.88.0 的 stable 版本（跳过 beta/rc 等 tag）
+        if tag.matches('.').count() == 2 && tag.chars().all(|c| c.is_ascii_digit() || c == '.') {
+            versions.push(AvailableVersion {
+                version: tag.to_string(),
+                is_lts: false,
+            });
+        }
+    }
+    if versions.is_empty() {
         return Ok(FALLBACK
             .iter()
             .map(|v| AvailableVersion {
