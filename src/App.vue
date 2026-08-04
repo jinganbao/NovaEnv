@@ -287,7 +287,6 @@ onUnmounted(() => {
         :selected="selected"
         :counts="counts"
         :services="services"
-        :version="appVersion"
         @select="selected = $event"
       />
 

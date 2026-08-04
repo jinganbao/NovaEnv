@@ -7,7 +7,6 @@ defineProps<{
   selected: RuntimeKind | ServiceInfo["kind"] | "settings";
   counts: Record<RuntimeKind, number>;
   services: ServiceInfo[];
-  version: string;
 }>();
 const emit = defineEmits<{
   (e: "select", kind: RuntimeKind | ServiceInfo["kind"] | "settings"): void;
@@ -81,7 +80,6 @@ function metaOf(kind: RuntimeKind | ServiceInfo["kind"]): { letter: string; colo
         <span class="nav-badge" :style="{ background: 'linear-gradient(135deg,#94a3b8,#475569)' }">⚙</span>
         <span class="nav-name">设置</span>
       </button>
-      <p class="sidebar-version">NovaEnv v{{ version }}</p>
     </div>
   </aside>
 </template>
@@ -246,12 +244,5 @@ function metaOf(kind: RuntimeKind | ServiceInfo["kind"]): { letter: string; colo
   padding-top: var(--space-3);
   margin-top: var(--space-2);
   flex-shrink: 0;
-}
-
-.sidebar-version {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  text-align: center;
-  padding-bottom: 2px;
 }
 </style>
