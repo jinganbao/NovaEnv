@@ -69,8 +69,15 @@ function openRepo() {
 <template>
   <div class="settings">
     <header class="settings-head">
-      <span class="icon">⚙️</span>
-      <h2>设置</h2>
+      <span
+        class="head-icon"
+        :style="{ background: 'linear-gradient(135deg,#94a3b8,#475569)' }"
+        >⚙</span
+      >
+      <div class="head-text">
+        <h2>设置</h2>
+        <p>主题 · 更新 · 管理目录</p>
+      </div>
     </header>
 
     <div v-if="feedback" :class="['banner', feedback.ok ? 'success' : 'error']">
@@ -259,9 +266,39 @@ function openRepo() {
 .settings-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding-bottom: 14px;
+  gap: 14px;
+  padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
+}
+
+.head-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  box-shadow: var(--shadow-md);
+  flex-shrink: 0;
+}
+
+.head-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.head-text h2 {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.head-text p {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
 }
 
 .icon {

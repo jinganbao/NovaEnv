@@ -18,6 +18,7 @@ import type {
   ServiceInfo,
   ServiceProgress,
 } from "../types";
+import { SERVICE_META } from "../types";
 
 const props = defineProps<{ service: ServiceInfo }>();
 const emit = defineEmits<{ (e: "refresh"): void }>();
@@ -229,21 +230,29 @@ onUnmounted(() => unlisten?.());
 
 <template>
   <div class="svc">
-    <div class="svc-head">
-      <div class="svc-title">
-        <span class="svc-icon">🗄️</span>
-        <span>{{ service.name }}</span>
+    <div class="page-head">
+      <span
+        class="head-icon"
+        :style="{ background: SERVICE_META[service.kind].color }"
+        >{{ SERVICE_META[service.kind].letter }}</span
+      >
+      <div class="head-text">
+        <h2>{{ service.name }}</h2>
+        <p>服务类组件 · 支持多版本并存</p>
+      </div>
+      <div class="head-status">
         <span
           v-if="service.installed"
           class="badge"
-          :class="service.running ? 'badge-running' : 'badge-stopped'"
+          :class="service.running ? 'badge-success' : 'badge-warning'"
         >
+          <span class="dot" :class="service.running ? 'dot-on' : 'dot-off'"></span>
           {{ service.running ? "运行中" : "已停止" }}
         </span>
         <span v-else class="badge">未安装</span>
       </div>
-      <p v-if="service.note" class="svc-note">{{ service.note }}</p>
     </div>
+    <p v-if="service.note" class="svc-note">{{ service.note }}</p>
 
     <!-- 已安装版本列表（多版本支持） -->
     <div v-if="service.installed" class="svc-card">
@@ -804,5 +813,62 @@ onUnmounted(() => unlisten?.());
 .btn.small {
   padding: 4px 10px;
   font-size: 12px;
+}
+
+/* ---- 页面头（与服务端统一） ---- */
+.page-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.head-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  box-shadow: var(--shadow-md);
+  flex-shrink: 0;
+}
+
+.head-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.head-text h2 {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.head-text p {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.head-status {
+  margin-left: auto;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.dot-on {
+  background: currentColor;
+}
+
+.dot-off {
+  background: currentColor;
 }
 </style>

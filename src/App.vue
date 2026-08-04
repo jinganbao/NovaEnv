@@ -66,10 +66,12 @@ function clearToast() {
 }
 
 // 启动时静默检查更新
-useAppUpdate(config, {
+const update = useAppUpdate(config, {
   error: (m) => showToast(false, m),
   success: () => {},
-}).autoCheckOnStartup();
+});
+update.autoCheckOnStartup();
+update.loadCurrentVersion();
 
 const counts = computed<Record<RuntimeKind, number>>(() => {
   const c: Record<RuntimeKind, number> = {
@@ -223,21 +225,49 @@ onUnmounted(() => {
   <div class="layout">
     <header class="header">
       <div class="brand">
-        <span class="logo">N</span>
-        <div>
+        <svg class="logo" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true">
+          <defs>
+            <linearGradient id="brand-g" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#34d399" />
+              <stop offset="1" stop-color="#0d9488" />
+            </linearGradient>
+          </defs>
+          <rect width="36" height="36" rx="10" fill="url(#brand-g)" />
+          <path
+            d="M12 10v16M12 10l11 8-11 8"
+            fill="none"
+            stroke="#06281f"
+            stroke-width="3.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <div class="brand-text">
           <h1>NovaEnv</h1>
           <p class="subtitle">开发环境可视化管理</p>
         </div>
+        <span class="badge badge-brand">v{{ update.currentVersion || "1.0.5" }}</span>
       </div>
-      <div class="overview-chips">
-        <div v-for="k in kinds" :key="k" class="chip" :title="`${RUNTIME_META[k].name} 当前版本`">
-          <span class="chip-icon">{{ RUNTIME_META[k].icon }}</span>
-          <span class="chip-ver">{{ overviewValue(k) }}</span>
+
+      <div class="header-right">
+        <div class="overview-chips">
+          <div v-for="k in kinds" :key="k" class="chip" :title="`${RUNTIME_META[k].name} 当前版本`">
+            <span
+              class="chip-icon"
+              :style="{ background: RUNTIME_META[k].color }"
+              >{{ RUNTIME_META[k].letter }}</span
+            >
+            <span class="chip-ver">{{ overviewValue(k) }}</span>
+          </div>
         </div>
+        <button class="btn btn-ghost" :disabled="loading" @click="refresh">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+          {{ loading ? "扫描中…" : "重新扫描" }}
+        </button>
       </div>
-      <button class="btn" :disabled="loading" @click="refresh">
-        {{ loading ? "扫描中…" : "重新扫描" }}
-      </button>
     </header>
 
     <div v-if="error" class="banner error">{{ error }}</div>
@@ -255,6 +285,7 @@ onUnmounted(() => {
         :selected="selected"
         :counts="counts"
         :services="services"
+        :version="update.currentVersion.value || '1.0.5'"
         @select="selected = $event"
       />
 
@@ -314,10 +345,11 @@ onUnmounted(() => {
 .header {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 24px;
+  gap: var(--space-4);
+  padding: 10px 20px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-panel);
+  flex-shrink: 0;
 }
 
 .brand {
@@ -326,32 +358,33 @@ onUnmounted(() => {
   gap: 12px;
 }
 
-.logo {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: var(--brand);
-  color: #fff;
-  font-size: 22px;
-  font-weight: 700;
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
 }
 
 h1 {
-  font-size: 19px;
-  line-height: 1.2;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .subtitle {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--text-xs);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-left: auto;
 }
 
 .overview-chips {
   display: flex;
-  gap: 8px;
-  margin-left: auto;
+  gap: var(--space-2);
 }
 
 .chip {
@@ -360,36 +393,28 @@ h1 {
   gap: 6px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-app);
-  border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 12px;
+  border-radius: var(--radius-pill);
+  padding: 3px 10px 3px 4px;
+  font-size: var(--text-xs);
+}
+
+.chip-icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .chip-ver {
   font-weight: 600;
-  max-width: 160px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.btn {
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-panel);
-  color: var(--text-primary);
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-size: 13px;
-  transition: background 0.15s;
-}
-
-.btn:hover:not(:disabled) {
-  background: var(--bg-panel-hover);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .banner {
@@ -420,7 +445,7 @@ h1 {
 .content {
   flex: 1;
   min-width: 0;
-  padding: 24px 28px 40px;
+  padding: var(--space-6) var(--space-6) var(--space-8);
   overflow-y: auto;
 }
 

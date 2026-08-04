@@ -17,14 +17,23 @@ function defaultVersion(): RuntimeVersion | undefined {
 
 <template>
   <div class="detail">
-    <header class="detail-head">
-      <span class="icon">{{ RUNTIME_META[kind].icon }}</span>
-      <h2>{{ RUNTIME_META[kind].name }}</h2>
-      <span class="desc">{{ RUNTIME_META[kind].desc }}</span>
-      <span v-if="defaultVersion()" class="current">
-        当前默认：<strong>{{ defaultVersion()!.version }}</strong>
-      </span>
-      <span v-else class="current muted">未设置默认版本</span>
+    <header class="page-head">
+      <span
+        class="head-icon"
+        :style="{ background: RUNTIME_META[kind].color }"
+        >{{ RUNTIME_META[kind].letter }}</span
+      >
+      <div class="head-text">
+        <h2>{{ RUNTIME_META[kind].name }}</h2>
+        <p>{{ RUNTIME_META[kind].desc }}</p>
+      </div>
+      <div class="head-status">
+        <span v-if="defaultVersion()" class="badge badge-success">
+          <span class="dot"></span>
+          当前默认 {{ defaultVersion()!.version }}
+        </span>
+        <span v-else class="badge badge-warning">未设置默认版本</span>
+      </div>
     </header>
 
     <RuntimeVersionList
@@ -41,41 +50,54 @@ function defaultVersion(): RuntimeVersion | undefined {
 .detail {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--space-5);
 }
 
-.detail-head {
+.page-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding-bottom: 14px;
+  gap: 14px;
+  padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.icon {
-  font-size: 22px;
+.head-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  box-shadow: var(--shadow-md);
+}
+
+.head-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
 }
 
 h2 {
-  font-size: 18px;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
-.desc {
+.head-text p {
+  font-size: var(--text-sm);
   color: var(--text-secondary);
-  font-size: 13px;
 }
 
-.current {
+.head-status {
   margin-left: auto;
-  color: var(--text-secondary);
-  font-size: 13px;
 }
 
-.current strong {
-  color: var(--success);
-}
-
-.current.muted {
-  color: var(--text-secondary);
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 </style>

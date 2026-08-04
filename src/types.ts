@@ -139,14 +139,23 @@ export interface ActivationPreview {
   note: string;
 }
 
-/** 运行时展示元信息 */
+/** 运行时展示元信息（含品牌色与字母，用于图标与概览） */
 export const RUNTIME_META: Record<
   RuntimeKind,
-  { name: string; icon: string; desc: string }
+  { name: string; icon: string; desc: string; letter: string; color: string }
 > = {
-  java: { name: "Java", icon: "☕", desc: "JDK 运行时" },
-  node: { name: "Node.js", icon: "🟢", desc: "JavaScript 运行时" },
-  go: { name: "Go", icon: "🐹", desc: "Go 编程语言" },
-  maven: { name: "Maven", icon: "📦", desc: "Java 构建工具" },
-  python: { name: "Python", icon: "🐍", desc: "Python 解释器" },
+  java: { name: "Java", icon: "☕", desc: "JDK 运行时", letter: "J", color: "linear-gradient(135deg,#f59e0b,#ea580c)" },
+  node: { name: "Node.js", icon: "🟢", desc: "JavaScript 运行时", letter: "N", color: "linear-gradient(135deg,#4ade80,#22c55e)" },
+  go: { name: "Go", icon: "🐹", desc: "Go 编程语言", letter: "G", color: "linear-gradient(135deg,#38bdf8,#0891b2)" },
+  maven: { name: "Maven", icon: "📦", desc: "Java 构建工具", letter: "M", color: "linear-gradient(135deg,#f87171,#dc2626)" },
+  python: { name: "Python", icon: "🐍", desc: "Python 解释器", letter: "P", color: "linear-gradient(135deg,#60a5fa,#2563eb)" },
+};
+
+/** 服务展示元信息（品牌色与字母） */
+export const SERVICE_META: Record<
+  ServiceKind,
+  { name: string; letter: string; color: string }
+> = {
+  redis: { name: "Redis", letter: "R", color: "linear-gradient(135deg,#f87171,#b91c1c)" },
+  mysql: { name: "MySQL", letter: "S", color: "linear-gradient(135deg,#22d3ee,#0e7490)" },
 };

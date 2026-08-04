@@ -29,7 +29,7 @@ const installingMajor = ref("");
 
 let unlisten: (() => void) | null = null;
 
-/** 大版本标识：Go 取前两段（1.24），其余取第一段 */
+/** 大版本标识：Go/Python 取前两段（1.24 / 3.13），其余取第一段 */
 function majorOf(version: string): string {
   if (props.kind === "go" || props.kind === "python") {
     return version.split(".").slice(0, 2).join(".");
@@ -84,6 +84,26 @@ function installedOf(major: string): RuntimeVersion[] {
   return installedByMajor.value.get(major) ?? [];
 }
 
+/** 分组展开状态（小版本多时折叠，默认显示前 6 条） */
+const expanded = ref<Record<string, boolean>>({});
+const PREVIEW_LIMIT = 6;
+
+function visibleVersions(g: AvailableVersionGroup): string[] {
+  if (expanded.value[g.major] || g.versions.length <= PREVIEW_LIMIT) {
+    return g.versions;
+  }
+  return g.versions.slice(0, PREVIEW_LIMIT);
+}
+
+function toggleExpand(g: AvailableVersionGroup) {
+  expanded.value = { ...expanded.value, [g.major]: !expanded.value[g.major] };
+}
+
+/** 某版本是否已安装 */
+function isInstalled(version: string): RuntimeVersion | undefined {
+  return props.installed.find((v) => v.version === version);
+}
+
 /** 该大版本已装最新版本是否落后于官方最新（可升级） */
 function hasNewer(g: AvailableVersionGroup): boolean {
   if (!g.latest) return false;
@@ -118,8 +138,8 @@ async function doInstall(g: AvailableVersionGroup, target: string) {
     let text = `安装完成：${target}`;
     if (res.removed.length) {
       text = `已安装 ${target}，自动替换同大版本旧版本：${res.removed.join("、")}`;
-      if (res.promoted) text += "，并已自动设为默认";
     }
+    if (res.promoted) text += "，并已自动设为默认";
     result.value = { ok: true, text };
   } catch (e) {
     result.value = { ok: false, text: `安装失败: ${e}` };
@@ -161,8 +181,15 @@ onUnmounted(() => unlisten?.());
 <template>
   <section class="version-list">
     <div class="panel-head">
-      <h3>可用版本（按大版本）</h3>
-      <button class="btn mini" :disabled="loading || busy" @click="load(true)">
+      <div class="panel-head-text">
+        <h3>可用版本</h3>
+        <span class="panel-sub">按大版本分组 · 同大版本自动保留最新</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" :disabled="loading || busy" @click="load(true)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+          <path d="M21 3v6h-6" />
+        </svg>
         {{ loading ? "获取中…" : "刷新列表" }}
       </button>
     </div>
@@ -174,23 +201,26 @@ onUnmounted(() => unlisten?.());
       <div
         v-for="g in merged"
         :key="g.major"
-        class="group"
+        class="group card"
         :class="{ 'has-installed': installedOf(g.major).length > 0 }"
       >
-        <div class="group-row">
+        <div class="group-head">
+          <span
+            class="g-badge"
+            :style="{ background: RUNTIME_META[kind].color }"
+            >{{ RUNTIME_META[kind].letter }}</span
+          >
           <span class="g-name">{{ RUNTIME_META[kind].name }} {{ g.major }}</span>
-          <span v-if="g.isLts" class="badge lts">LTS</span>
+          <span v-if="g.isLts" class="badge badge-brand">LTS</span>
           <span class="g-latest">最新 {{ g.latest || "—" }}</span>
+
           <div class="g-actions">
-            <span
-              v-if="installedOf(g.major).length && !hasNewer(g)"
-              class="ok-text"
-            >
-              已是最新 ✓
+            <span v-if="installedOf(g.major).length && !hasNewer(g)" class="ok-text">
+              已是最新
             </span>
             <button
               v-if="!installedOf(g.major).length"
-              class="btn primary"
+              class="btn btn-primary btn-sm"
               :disabled="busy"
               @click="doInstall(g, g.latest)"
             >
@@ -198,7 +228,7 @@ onUnmounted(() => unlisten?.());
             </button>
             <button
               v-if="installedOf(g.major).length && hasNewer(g)"
-              class="btn primary"
+              class="btn btn-primary btn-sm"
               :disabled="busy"
               @click="doInstall(g, g.latest)"
             >
@@ -211,48 +241,56 @@ onUnmounted(() => unlisten?.());
           </div>
         </div>
 
-        <!-- 该大版本下已安装的小版本 -->
-        <div v-if="installedOf(g.major).length" class="g-installed">
-          <span class="label">已安装：</span>
-          <span
-            v-for="v in installedOf(g.major)"
-            :key="v.path"
-            class="installed-chip"
+        <!-- 该大版本下的全部版本行 -->
+        <div class="g-versions">
+          <div
+            v-for="ver in visibleVersions(g)"
+            :key="ver"
+            class="ver-row"
+            :class="{ installed: !!isInstalled(ver) }"
           >
-            <span class="chip-ver" :class="{ def: v.isDefault }">
-              {{ v.version }}{{ v.isDefault ? "（默认）" : "" }}
+            <span class="ver-name">{{ ver }}</span>
+            <span v-if="ver === g.latest && !isInstalled(ver)" class="badge badge-warning">
+              最新
             </span>
-            <button
-              v-if="!v.isDefault"
-              class="mini-btn"
-              @click="emit('activate', v)"
-            >
-              设为默认
-            </button>
-            <button
-              v-if="v.managed && !v.isDefault"
-              class="mini-btn danger"
-              @click="emit('uninstall', v)"
-            >
-              卸载
-            </button>
-          </span>
+            <span v-if="isInstalled(ver)" class="badge badge-success">
+              {{ isInstalled(ver)!.isDefault ? "默认" : "已安装" }}
+            </span>
+            <div class="ver-actions">
+              <button
+                v-if="isInstalled(ver) && !isInstalled(ver)!.isDefault"
+                class="btn btn-sm"
+                :disabled="busy"
+                @click="emit('activate', isInstalled(ver)!)"
+              >
+                设为默认
+              </button>
+              <button
+                v-if="isInstalled(ver) && isInstalled(ver)!.managed && !isInstalled(ver)!.isDefault"
+                class="btn btn-sm btn-danger"
+                :disabled="busy"
+                @click="emit('uninstall', isInstalled(ver)!)"
+              >
+                卸载
+              </button>
+            </div>
+          </div>
+          <button
+            v-if="g.versions.length > PREVIEW_LIMIT"
+            class="expand-btn"
+            @click="toggleExpand(g)"
+          >
+            {{ expanded[g.major] ? "收起" : `显示全部 ${g.versions.length} 个版本` }}
+          </button>
         </div>
 
         <!-- 该组正在安装/升级的进度 -->
-        <div
-          v-if="busy && installingMajor === g.major && progress"
-          class="progress"
-        >
+        <div v-if="busy && installingMajor === g.major && progress" class="progress">
           <div class="bar">
             <div
               class="fill"
               :class="{ indeterminate: progress.percent == null }"
-              :style="
-                progress.percent != null
-                  ? { width: progress.percent + '%' }
-                  : {}
-              "
+              :style="progress.percent != null ? { width: progress.percent + '%' } : {}"
             ></div>
           </div>
           <span class="msg">{{ progress.message }}</span>
@@ -270,52 +308,36 @@ onUnmounted(() => unlisten?.());
 .version-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-4);
 }
 
 .panel-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.panel-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 h3 {
-  font-size: 15px;
+  font-size: var(--text-lg);
+  font-weight: 700;
 }
 
-.btn {
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-panel);
-  color: var(--text-primary);
-  border-radius: 8px;
-  padding: 7px 14px;
-  font-size: 13px;
-  transition: background 0.15s;
-}
-
-.btn.mini {
-  padding: 4px 10px;
-  font-size: 12px;
-}
-
-.btn.primary {
-  background: var(--brand);
-  border-color: var(--brand);
-  color: #fff;
-}
-
-.btn.primary:hover:not(:disabled) {
-  background: var(--brand-hover);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.panel-sub {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 .hint {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--text-md);
+  padding: var(--space-3) 0;
 }
 
 .hint.error {
@@ -325,136 +347,130 @@ h3 {
 .groups {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-4);
 }
 
+/* ---- 分组卡 ---- */
 .group {
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-app);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  overflow: hidden;
+  transition: border-color var(--duration) var(--ease);
 }
 
 .group.has-installed {
-  border-color: var(--success);
+  border-color: rgba(52, 211, 153, 0.35);
 }
 
-.group-row {
+.group-head {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.g-badge {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .g-name {
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 700;
 }
 
-.badge.lts {
-  background: var(--success);
-  color: #fff;
-  font-size: 11px;
-  padding: 1px 8px;
-  border-radius: 999px;
-}
-
 .g-latest {
-  color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
 }
 
 .g-actions {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .ok-text {
+  font-size: var(--text-sm);
   color: var(--success);
-  font-size: 13px;
   font-weight: 600;
 }
 
-.g-installed {
+/* ---- 版本行 ---- */
+.g-versions {
+  display: flex;
+  flex-direction: column;
+}
+
+.ver-row {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 10px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--duration) var(--ease);
 }
 
-.label {
-  color: var(--text-secondary);
-  font-size: 12px;
+.ver-row:last-child {
+  border-bottom: none;
 }
 
-.installed-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-panel);
-  border-radius: 8px;
-  padding: 4px 8px;
-}
-
-.chip-ver {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.chip-ver.def {
-  color: var(--success);
-}
-
-.mini-btn {
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-panel);
-  color: var(--text-primary);
-  border-radius: 6px;
-  padding: 2px 8px;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.mini-btn:hover {
+.ver-row:hover {
   background: var(--bg-panel-hover);
 }
 
-.mini-btn.danger {
-  color: var(--danger);
-  border-color: var(--danger);
+.ver-row.installed {
+  background: rgba(52, 211, 153, 0.06);
 }
 
+.ver-name {
+  font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.ver-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+/* ---- 进度条 ---- */
 .progress {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .bar {
-  height: 8px;
+  height: 6px;
   border-radius: 999px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
   overflow: hidden;
 }
 
 .fill {
   height: 100%;
   background: var(--brand);
-  transition: width 0.2s;
+  border-radius: 999px;
+  transition: width 0.3s var(--ease);
 }
 
 .fill.indeterminate {
-  width: 40%;
-  animation: indeterminate-slide 1.2s infinite ease-in-out;
+  width: 40% !important;
+  animation: slide 1.2s infinite var(--ease);
 }
 
-@keyframes indeterminate-slide {
+@keyframes slide {
   0% {
     margin-left: -40%;
   }
@@ -464,19 +480,41 @@ h3 {
 }
 
 .msg {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
 .result {
-  font-size: 13px;
+  font-size: var(--text-md);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  border: 1px solid;
 }
 
 .result.ok {
   color: var(--success);
+  border-color: transparent;
+  background: var(--success-soft);
 }
 
 .result.fail {
   color: var(--danger);
+  border-color: transparent;
+  background: var(--danger-soft);
+}
+
+.expand-btn {
+  border: none;
+  background: transparent;
+  color: var(--brand);
+  font-size: var(--text-sm);
+  padding: 8px;
+  width: 100%;
+  border-top: 1px solid var(--border-subtle);
+  transition: background var(--duration) var(--ease);
+}
+
+.expand-btn:hover {
+  background: var(--brand-soft);
 }
 </style>
