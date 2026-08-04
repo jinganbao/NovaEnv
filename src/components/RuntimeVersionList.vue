@@ -31,7 +31,9 @@ let unlisten: (() => void) | null = null;
 
 /** 大版本标识：Go 取前两段（1.24），其余取第一段 */
 function majorOf(version: string): string {
-  if (props.kind === "go") return version.split(".").slice(0, 2).join(".");
+  if (props.kind === "go" || props.kind === "python") {
+    return version.split(".").slice(0, 2).join(".");
+  }
   return version.split(".")[0];
 }
 
