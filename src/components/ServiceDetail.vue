@@ -102,12 +102,12 @@ function isUpToDate(g: AvailableVersionGroup): boolean {
 }
 
 async function loadVersions() {
-  if (!props.service.installed) {
-    loadingVersions.value = true;
-    try {
-      versions.value = await availableServiceVersions(props.service.kind);
-    } catch (e) {
-      result.value = { ok: false, text: `获取版本列表失败: ${e}` };
+  if (versions.value.length) return; // 已加载过不再重复拉取
+  loadingVersions.value = true;
+  try {
+    versions.value = await availableServiceVersions(props.service.kind);
+  } catch (e) {
+    result.value = { ok: false, text: `获取版本列表失败: ${e}` };
     } finally {
       loadingVersions.value = false;
     }
@@ -298,11 +298,15 @@ onUnmounted(() => unlisten?.());
       </p>
     </div>
 
-    <!-- 安装面板：按大版本分组 -->
-    <div v-else class="svc-card">
+    <!-- 安装面板：按大版本分组（始终可见，支持安装多个版本并存） -->
+    <div class="svc-card">
       <div class="svc-install">
         <p class="svc-install-tip">
-          安装 {{ service.name }}（自动下载源码并编译，约 1-2 分钟）
+          {{
+            service.installed
+              ? `安装其他版本（当前已安装：${installedText}）`
+              : `安装 ${service.name}（自动下载源码并编译，约 1-2 分钟）`
+          }}
         </p>
         <div v-if="loadingVersions" class="svc-muted">正在获取版本列表…</div>
         <div v-else-if="versions.length" class="svc-groups">
@@ -322,7 +326,7 @@ onUnmounted(() => unlisten?.());
               :disabled="busy"
               @click="doInstall(g.latest)"
             >
-              {{ installedMajor === g.major ? `升级到 ${g.latest}` : "安装" }}
+              {{ `安装 ${g.latest}` }}
             </button>
             <span v-else class="svc-muted">已安装 {{ installedText }}</span>
           </div>
