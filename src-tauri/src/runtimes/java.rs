@@ -93,10 +93,7 @@ fn parse_java_home_v(output: &str) -> Vec<(String, String, String)> {
     let mut result = Vec::new();
     for line in output.lines() {
         let line = line.trim();
-        if line.is_empty()
-            || line.starts_with("Matching")
-            || line.starts_with("No Java")
-        {
+        if line.is_empty() || line.starts_with("Matching") || line.starts_with("No Java") {
             continue;
         }
         let path = line.rsplit(' ').next().unwrap_or("");
@@ -154,9 +151,7 @@ fn scan_jdk_dirs(dirs: &[PathBuf], home_inside: bool) -> Vec<(String, String, St
             if !jdk.is_dir() {
                 continue;
             }
-            if let Some((path, version, vendor)) =
-                resolve_jdk_home(&jdk, home_inside)
-            {
+            if let Some((path, version, vendor)) = resolve_jdk_home(&jdk, home_inside) {
                 result.push((path, version, vendor));
             }
         }
@@ -180,7 +175,11 @@ fn resolve_jdk_home(jdk: &Path, home_inside: bool) -> Option<(String, String, St
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     if let Some(version) = extract_version(&name) {
-        return Some((jdk.to_string_lossy().into_owned(), version, "Unknown".into()));
+        return Some((
+            jdk.to_string_lossy().into_owned(),
+            version,
+            "Unknown".into(),
+        ));
     }
     None
 }
@@ -220,11 +219,7 @@ pub(crate) fn extract_version(s: &str) -> Option<String> {
         }
         let cand = chars[i..j].iter().collect::<String>();
         let cand = cand.trim_end_matches('.').to_string();
-        if cand.contains('.')
-            && best
-                .as_ref()
-                .map_or(true, |b: &String| cand.len() > b.len())
-        {
+        if cand.contains('.') && best.as_ref().is_none_or(|b: &String| cand.len() > b.len()) {
             best = Some(cand);
         }
         i = j;

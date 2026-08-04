@@ -100,7 +100,13 @@ pub fn info() -> ServiceInfo {
             autostart,
             data_dir: installed
                 .as_ref()
-                .map(|v| data_root().join("mysql").join(v).to_string_lossy().into_owned())
+                .map(|v| {
+                    data_root()
+                        .join("mysql")
+                        .join(v)
+                        .to_string_lossy()
+                        .into_owned()
+                })
                 .unwrap_or_default(),
             note: None,
         }
@@ -221,11 +227,7 @@ pub fn available_version_groups() -> Result<Vec<crate::models::AvailableVersionG
 #[cfg(target_os = "macos")]
 fn resolve_download_url(version: &str) -> Result<String, String> {
     // 官方目录按大版本前两段组织（MySQL-8.4 / MySQL-9.0），与 Go 的 major 规则一致
-    let major = version
-        .split('.')
-        .take(2)
-        .collect::<Vec<_>>()
-        .join(".");
+    let major = version.split('.').take(2).collect::<Vec<_>>().join(".");
     // 已知版本直接使用记录在案的包名（跳过网络探测，兼容慢网络/超时）
     if let Some((_, tag)) = KNOWN_VERSIONS.iter().find(|(v, _)| *v == version) {
         return Ok(format!(
@@ -396,13 +398,10 @@ pub fn read_conf(version: &str) -> Option<ServiceConfig> {
         let Some((key, value)) = line.split_once('=') else {
             continue;
         };
-        match key.trim() {
-            "port" => {
-                if let Ok(p) = value.trim().parse::<u16>() {
-                    port = p;
-                }
+        if key.trim() == "port" {
+            if let Ok(p) = value.trim().parse::<u16>() {
+                port = p;
             }
-            _ => {}
         }
     }
     // 密码不落盘：通过 mysql 客户端查询
@@ -434,7 +433,9 @@ pub fn start(version: &str) -> Result<(), String> {
 
     let child = Command::new(&mysqld)
         .args([&format!("--defaults-file={}", conf.display())])
-        .stdout(std::process::Stdio::from(log.try_clone().map_err(|e| format!("日志文件错误: {e}"))?))
+        .stdout(std::process::Stdio::from(
+            log.try_clone().map_err(|e| format!("日志文件错误: {e}"))?,
+        ))
         .stderr(std::process::Stdio::from(log))
         .spawn()
         .map_err(|e| format!("启动失败: {e}"))?;
@@ -693,7 +694,7 @@ fn download(
         written += n as u64;
         if let Some(total) = total {
             if total > 0 {
-                let pct = ((written * 100) / total) as i64;
+                let pct = written.checked_mul(100).map(|v| v / total).unwrap_or(0) as i64;
                 if pct != last_pct {
                     last_pct = pct;
                     let mb = |b: u64| format!("{:.1}", b as f64 / 1024.0 / 1024.0);

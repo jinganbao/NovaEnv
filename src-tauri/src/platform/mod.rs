@@ -70,4 +70,3 @@ pub fn is_active_dir(dir: &Path) -> bool {
         dir == pp || dir == pp.parent().unwrap_or(&pp)
     })
 }
-

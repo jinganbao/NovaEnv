@@ -32,17 +32,14 @@ pub fn plist_path(kind: &str, version: &str) -> PathBuf {
 }
 
 /// 生成 LaunchAgent plist 内容（RunAtLoad + KeepAlive）
-pub fn plist_content(
-    kind: &str,
-    version: &str,
-    program_args: &[String],
-    log_dir: &str,
-) -> String {
+pub fn plist_content(kind: &str, version: &str, program_args: &[String], log_dir: &str) -> String {
     let label = label(kind, version);
     let args_xml: Vec<String> = program_args
         .iter()
         .map(|a| format!("    <string>{}</string>", escape_xml(a)))
         .collect();
+    let out = format!("{log_dir}/{kind}-{version}.launchd.out");
+    let err = format!("{log_dir}/{kind}-{version}.launchd.err");
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -68,8 +65,6 @@ pub fn plist_content(
 </plist>
 "#,
         args_xml.join("\n"),
-        out = format!("{log_dir}/{kind}-{version}.launchd.out"),
-        err = format!("{log_dir}/{kind}-{version}.launchd.err"),
     )
 }
 
@@ -82,9 +77,15 @@ fn escape_xml(s: &str) -> String {
 }
 
 /// 写入 plist 并 bootstrap（开启自启）
-pub fn enable(kind: &str, version: &str, program_args: &[String], log_dir: &str) -> Result<(), String> {
+pub fn enable(
+    kind: &str,
+    version: &str,
+    program_args: &[String],
+    log_dir: &str,
+) -> Result<(), String> {
     let path = plist_path(kind, version);
-    std::fs::create_dir_all(agents_dir()).map_err(|e| format!("创建 LaunchAgents 目录失败: {e}"))?;
+    std::fs::create_dir_all(agents_dir())
+        .map_err(|e| format!("创建 LaunchAgents 目录失败: {e}"))?;
     std::fs::write(&path, plist_content(kind, version, program_args, log_dir))
         .map_err(|e| format!("写入 plist 失败: {e}"))?;
     // 已加载则先卸载（避免 bootstrap 冲突）
@@ -143,7 +144,11 @@ pub fn start(kind: &str, version: &str) -> Result<(), String> {
     let path = plist_path(kind, version);
     if !is_loaded(kind, version) {
         let status = Command::new("launchctl")
-            .args(["bootstrap", &format!("gui/{uid}"), path.to_str().unwrap_or_default()])
+            .args([
+                "bootstrap",
+                &format!("gui/{uid}"),
+                path.to_str().unwrap_or_default(),
+            ])
             .status()
             .map_err(|e| format!("launchctl 不可用: {e}"))?;
         if !status.success() {

@@ -9,8 +9,8 @@
 //! 安装流程：下载（流式 + 进度事件）→ 解压到临时目录 → 定位实际内容
 //! → 移动到安装目录 → 清理。进度通过 tauri 事件 `install-progress` 推送。
 
-use std::collections::HashMap;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -40,7 +40,7 @@ pub fn installs_dir() -> PathBuf {
 
 /// 判断路径是否为 NovaEnv 管理的安装（可卸载）
 pub fn is_managed(path: &str) -> bool {
-    Path::new(path).starts_with(&installs_dir())
+    Path::new(path).starts_with(installs_dir())
 }
 
 /// 各运行时在安装目录下的子目录名
@@ -68,7 +68,11 @@ fn zulu_platform() -> (&'static str, &'static str, &'static str) {
     let arch = "aarch64";
     #[cfg(not(target_arch = "aarch64"))]
     let arch = "x86_64";
-    let archive_type = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
+    let archive_type = if cfg!(target_os = "windows") {
+        "zip"
+    } else {
+        "tar.gz"
+    };
     (os, arch, archive_type)
 }
 
@@ -123,8 +127,7 @@ fn zulu_java_version(pkg: &serde_json::Value) -> Option<String> {
 /// 构造下载 URL 与本地归档文件路径
 fn download_url(kind: RuntimeKind, version: &str) -> Result<(String, PathBuf), String> {
     let downloads = installs_dir().join("_downloads");
-    std::fs::create_dir_all(&downloads)
-        .map_err(|e| format!("创建下载目录失败: {e}"))?;
+    std::fs::create_dir_all(&downloads).map_err(|e| format!("创建下载目录失败: {e}"))?;
 
     match kind {
         RuntimeKind::Java => {
@@ -146,13 +149,31 @@ fn download_url(kind: RuntimeKind, version: &str) -> Result<(String, PathBuf), S
         }
         RuntimeKind::Node => {
             let (os_name, arch_name) = if cfg!(target_os = "macos") {
-                ("darwin", if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" })
+                (
+                    "darwin",
+                    if cfg!(target_arch = "aarch64") {
+                        "arm64"
+                    } else {
+                        "x64"
+                    },
+                )
             } else if cfg!(target_os = "windows") {
                 ("win", "x64")
             } else {
-                ("linux", if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" })
+                (
+                    "linux",
+                    if cfg!(target_arch = "aarch64") {
+                        "arm64"
+                    } else {
+                        "x64"
+                    },
+                )
             };
-            let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
+            let ext = if cfg!(target_os = "windows") {
+                "zip"
+            } else {
+                "tar.gz"
+            };
             let url = format!(
                 "https://nodejs.org/dist/v{version}/node-v{version}-{os_name}-{arch_name}.{ext}"
             );
@@ -160,20 +181,42 @@ fn download_url(kind: RuntimeKind, version: &str) -> Result<(String, PathBuf), S
         }
         RuntimeKind::Go => {
             let (os_name, arch_name) = if cfg!(target_os = "macos") {
-                ("darwin", if cfg!(target_arch = "aarch64") { "arm64" } else { "amd64" })
+                (
+                    "darwin",
+                    if cfg!(target_arch = "aarch64") {
+                        "arm64"
+                    } else {
+                        "amd64"
+                    },
+                )
             } else if cfg!(target_os = "windows") {
                 ("windows", "amd64")
             } else {
-                ("linux", if cfg!(target_arch = "aarch64") { "arm64" } else { "amd64" })
+                (
+                    "linux",
+                    if cfg!(target_arch = "aarch64") {
+                        "arm64"
+                    } else {
+                        "amd64"
+                    },
+                )
             };
-            let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
+            let ext = if cfg!(target_os = "windows") {
+                "zip"
+            } else {
+                "tar.gz"
+            };
             let url = format!("https://go.dev/dl/go{version}.{os_name}-{arch_name}.{ext}");
             Ok((url, downloads.join(format!("go{version}.{ext}"))))
         }
         RuntimeKind::Maven => {
             // Apache Maven（纯 Java 工具，无平台/架构区分）。
             // 官方源（dlcdn/archive）到国内网络极慢，优先国内镜像，全挂后回退官方。
-            let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
+            let ext = if cfg!(target_os = "windows") {
+                "zip"
+            } else {
+                "tar.gz"
+            };
             let file = format!("apache-maven-{version}-bin.{ext}");
             let candidates = [
                 format!("https://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3/{version}/binaries/{file}"),
@@ -294,8 +337,7 @@ pub(crate) fn extract(archive: &Path, target: &Path) -> Result<(), String> {
     } else if ext == "zip" {
         let file = std::fs::File::open(archive).map_err(|e| format!("打开归档失败: {e}"))?;
         let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("读取 zip 失败: {e}"))?;
-        zip.extract(target)
-            .map_err(|e| format!("解压失败: {e}"))?;
+        zip.extract(target).map_err(|e| format!("解压失败: {e}"))?;
     } else {
         return Err(format!("不支持的归档格式: {ext}"));
     }
@@ -357,7 +399,10 @@ fn locate_extracted(
 /// 安装指定版本的运行时。
 /// 同一大版本只保留最新小版本：安装成功后自动移除同大版本的旧版本；
 /// 若被移除的旧版本是默认版本，则自动把新版本设为默认。
-pub fn install(app: &AppHandle, request: &InstallRequest) -> Result<crate::models::InstallResult, String> {
+pub fn install(
+    app: &AppHandle,
+    request: &InstallRequest,
+) -> Result<crate::models::InstallResult, String> {
     let _guard = INSTALL_LOCK
         .try_lock()
         .map_err(|_| "已有安装任务正在进行中，请稍候".to_string())?;
@@ -397,7 +442,14 @@ pub fn install(app: &AppHandle, request: &InstallRequest) -> Result<crate::model
     }
     std::fs::create_dir_all(dest.parent().ok_or("安装目录无效")?)
         .map_err(|e| format!("创建安装目录失败: {e}"))?;
-    emit_progress(app, kind, &final_version, "installing", None, "写入安装目录…");
+    emit_progress(
+        app,
+        kind,
+        &final_version,
+        "installing",
+        None,
+        "写入安装目录…",
+    );
     std::fs::rename(&src, &dest).map_err(|e| format!("移动到安装目录失败: {e}"))?;
 
     // 5) 清理
@@ -495,7 +547,7 @@ pub fn uninstall(version: &RuntimeVersion) -> Result<(), String> {
 
 /// 收集管理目录信息：路径 / 已管理版本数 / 占用空间
 pub fn manage_info() -> crate::models::ManageInfo {
-    use crate::models::{ManagedRuntimeInfo, ManageInfo};
+    use crate::models::{ManageInfo, ManagedRuntimeInfo};
 
     let installs = installs_dir();
     let mut runtimes = Vec::new();
@@ -663,12 +715,18 @@ fn save_disk_cache(kind: RuntimeKind, groups: &[AvailableVersionGroup]) {
     let dir = cache_path(kind).parent().map(|p| p.to_path_buf());
     if let Some(dir) = dir {
         let _ = std::fs::create_dir_all(&dir);
-        let _ = std::fs::write(cache_path(kind), serde_json::to_vec(&json).unwrap_or_default());
+        let _ = std::fs::write(
+            cache_path(kind),
+            serde_json::to_vec(&json).unwrap_or_default(),
+        );
     }
 }
 
 /// 扁平版本列表按大版本分组（Go 的大版本为前两段，如 1.24；其余为第一段）
-fn group_versions(kind: RuntimeKind, versions: Vec<AvailableVersion>) -> Vec<AvailableVersionGroup> {
+fn group_versions(
+    kind: RuntimeKind,
+    versions: Vec<AvailableVersion>,
+) -> Vec<AvailableVersionGroup> {
     let mut groups: Vec<AvailableVersionGroup> = Vec::new();
     for v in versions {
         let major = major_of(kind, &v.version);
@@ -720,11 +778,7 @@ fn compare_versions(a: &str, b: &str) -> Ordering {
 /// 计算版本的大版本标识
 fn major_of(kind: RuntimeKind, version: &str) -> String {
     match kind {
-        RuntimeKind::Go => version
-            .split('.')
-            .take(2)
-            .collect::<Vec<_>>()
-            .join("."),
+        RuntimeKind::Go => version.split('.').take(2).collect::<Vec<_>>().join("."),
         _ => version.split('.').next().unwrap_or(version).to_string(),
     }
 }
@@ -824,11 +878,15 @@ fn available_node() -> Result<Vec<AvailableVersion>, String> {
 }
 
 /// go.dev：dl/?mode=json，全部 stable 版本
-fn available_go() -> Result<Vec<AvailableVersion>, String> {    let json = http_get_json("https://go.dev/dl/?mode=json")?;
+fn available_go() -> Result<Vec<AvailableVersion>, String> {
+    let json = http_get_json("https://go.dev/dl/?mode=json")?;
     let arr = json.as_array().ok_or("go.dev 响应格式异常")?;
     let mut versions = Vec::new();
     for entry in arr.iter() {
-        let stable = entry.get("stable").and_then(|v| v.as_bool()).unwrap_or(false);
+        let stable = entry
+            .get("stable")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         if !stable {
             continue;
         }
@@ -854,15 +912,12 @@ fn available_maven() -> Result<Vec<AvailableVersion>, String> {
         .or_else(|_| http_get_text("https://archive.apache.org/dist/maven/maven-3/"))?;
     let mut versions = Vec::new();
     // 目录条目形如：<a href="3.9.16/">3.9.16/</a>
-    for cap in html
-        .match_indices("href=\"")
-        .filter_map(|(i, _)| {
-            let rest = &html[i + 6..];
-            let end = rest.find('"')?;
-            let href = &rest[..end];
-            href.strip_suffix('/').map(|d| d.to_string())
-        })
-    {
+    for cap in html.match_indices("href=\"").filter_map(|(i, _)| {
+        let rest = &html[i + 6..];
+        let end = rest.find('"')?;
+        let href = &rest[..end];
+        href.strip_suffix('/').map(|d| d.to_string())
+    }) {
         // 仅保留纯版本号目录（形如 3.9.16 / 3.0.4）
         let version = cap;
         let mut chars = version.chars();
@@ -890,8 +945,16 @@ fn available_maven() -> Result<Vec<AvailableVersion>, String> {
     }
     // 版本号倒序（最新在前）
     versions.sort_by(|a, b| {
-        let va: Vec<u32> = a.version.split('.').filter_map(|s| s.parse().ok()).collect();
-        let vb: Vec<u32> = b.version.split('.').filter_map(|s| s.parse().ok()).collect();
+        let va: Vec<u32> = a
+            .version
+            .split('.')
+            .filter_map(|s| s.parse().ok())
+            .collect();
+        let vb: Vec<u32> = b
+            .version
+            .split('.')
+            .filter_map(|s| s.parse().ok())
+            .collect();
         vb.cmp(&va)
     });
     if versions.is_empty() {

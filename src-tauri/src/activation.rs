@@ -209,7 +209,12 @@ fn upsert_managed_block(
     kept.extend(lines.iter().map(String::as_str));
 
     let block = format!("{BLOCK_START}\n{}\n{BLOCK_END}\n", kept.join("\n"));
-    Ok(format!("{}{}{}", &existing[..start], block, &existing[end..]))
+    Ok(format!(
+        "{}{}{}",
+        &existing[..start],
+        block,
+        &existing[end..]
+    ))
 }
 // ---------- Windows ----------
 

@@ -10,8 +10,8 @@ mod services;
 
 use activation::ActivationPreview;
 use models::{
-    AvailableVersionGroup, InstallRequest, InstallResult, ManageInfo, RuntimesPayload,
-    RuntimeKind, RuntimeVersion, ServiceConfig, ServiceInfo, ServiceInstallRequest, ServiceKind,
+    AvailableVersionGroup, InstallRequest, InstallResult, ManageInfo, RuntimeKind, RuntimeVersion,
+    RuntimesPayload, ServiceConfig, ServiceInfo, ServiceInstallRequest, ServiceKind,
 };
 
 /// 扫描全部运行时（JDK / Node / Go），返回概览 + 完整版本列表。
@@ -60,7 +60,8 @@ fn uninstall_version(version: RuntimeVersion) -> Result<(), String> {
 
 /// 获取管理目录信息（路径 / 版本数 / 占用空间）。
 #[tauri::command]
-fn get_manage_info() -> ManageInfo {    installer::manage_info()
+fn get_manage_info() -> ManageInfo {
+    installer::manage_info()
 }
 
 // ---------- 服务类组件（Redis 等） ----------
@@ -73,9 +74,7 @@ fn list_services() -> Vec<ServiceInfo> {
 
 /// 服务的可安装版本列表（按大版本分组，最新在前）。
 #[tauri::command]
-fn available_service_versions(
-    kind: ServiceKind,
-) -> Result<Vec<AvailableVersionGroup>, String> {
+fn available_service_versions(kind: ServiceKind) -> Result<Vec<AvailableVersionGroup>, String> {
     match kind {
         ServiceKind::Redis => services::redis::available_version_groups(),
         ServiceKind::MySql => services::mysql::available_version_groups(),
@@ -254,7 +253,11 @@ async fn set_service_autostart(
 
 /// 读取服务日志尾部（默认 200 行）。
 #[tauri::command]
-async fn service_logs(kind: ServiceKind, version: String, lines: Option<usize>) -> Result<String, String> {
+async fn service_logs(
+    kind: ServiceKind,
+    version: String,
+    lines: Option<usize>,
+) -> Result<String, String> {
     let lines = lines.unwrap_or(200);
     tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "macos")]

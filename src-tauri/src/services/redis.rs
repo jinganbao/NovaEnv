@@ -16,28 +16,42 @@ use std::time::Duration;
 
 use tauri::Emitter;
 
-use crate::models::{AvailableVersionGroup, ServiceConfig, ServiceInfo, ServiceKind, ServiceProgress};
+use crate::models::{
+    AvailableVersionGroup, ServiceConfig, ServiceInfo, ServiceKind, ServiceProgress,
+};
 
 const NAME: &str = "Redis";
 const DEFAULT_PORT: u16 = 6379;
 /// 服务根目录 ~/.novaenv/services
 fn services_dir() -> PathBuf {
-    crate::installer::installs_dir().parent().unwrap().join("services")
+    crate::installer::installs_dir()
+        .parent()
+        .unwrap()
+        .join("services")
 }
 
 /// 数据根目录 ~/.novaenv/data
 fn data_root() -> PathBuf {
-    crate::installer::installs_dir().parent().unwrap().join("data")
+    crate::installer::installs_dir()
+        .parent()
+        .unwrap()
+        .join("data")
 }
 
 /// 日志根目录 ~/.novaenv/logs
 fn logs_dir() -> PathBuf {
-    crate::installer::installs_dir().parent().unwrap().join("logs")
+    crate::installer::installs_dir()
+        .parent()
+        .unwrap()
+        .join("logs")
 }
 
 /// PID 根目录 ~/.novaenv/run
 fn run_dir() -> PathBuf {
-    crate::installer::installs_dir().parent().unwrap().join("run")
+    crate::installer::installs_dir()
+        .parent()
+        .unwrap()
+        .join("run")
 }
 
 /// 某版本的安装根目录
@@ -76,7 +90,13 @@ pub fn info() -> ServiceInfo {
             autostart,
             data_dir: installed
                 .as_ref()
-                .map(|v| data_root().join("redis").join(v).to_string_lossy().into_owned())
+                .map(|v| {
+                    data_root()
+                        .join("redis")
+                        .join(v)
+                        .to_string_lossy()
+                        .into_owned()
+                })
                 .unwrap_or_default(),
             note: None,
         }
@@ -153,8 +173,8 @@ fn read_pid(version: &str) -> Option<u32> {
 
 /// 内置兜底版本列表（官方源不可达时使用；均为 download.redis.io 已发布版本）
 const FALLBACK_VERSIONS: &[&str] = &[
-    "8.10.0", "8.8.1", "8.6.5", "8.4.0", "8.2.1", "8.0.4", "7.4.4", "7.2.8", "7.0.15",
-    "6.2.17", "6.0.20",
+    "8.10.0", "8.8.1", "8.6.5", "8.4.0", "8.2.1", "8.0.4", "7.4.4", "7.2.8", "7.0.15", "6.2.17",
+    "6.0.20",
 ];
 
 /// 服务可安装版本（按大版本分组，最新在前；官方源不可达时回退内置版本表）
@@ -206,10 +226,11 @@ fn fetch_versions_from_official() -> Result<Vec<String>, String> {
             }
         }
         // 形如 X.Y.Z 且以 .tar.gz 结尾才接受
-        if ver.matches('.').count() >= 2 && rest[ver.len()..].starts_with(".tar.gz") {
-            if !versions.contains(&ver) {
-                versions.push(ver);
-            }
+        if ver.matches('.').count() >= 2
+            && rest[ver.len()..].starts_with(".tar.gz")
+            && !versions.contains(&ver)
+        {
+            versions.push(ver);
         }
     }
     versions.sort_by(|a, b| cmp_versions(b, a));
@@ -277,7 +298,14 @@ pub fn install(
     // 3) 编译（make -j，仅构建核心二进制目标——默认 make 会附带构建
     //    可选模块（redisearch/redisjson 等），其依赖较新 make 4.x 与额外
     //    依赖，在 macOS 自带 make 3.81 上必然失败；核心 server 不受影响）
-    emit(app, kind, version, "compiling", None, "编译中（约 1-2 分钟）…");
+    emit(
+        app,
+        kind,
+        version,
+        "compiling",
+        None,
+        "编译中（约 1-2 分钟）…",
+    );
     let jobs = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4)
@@ -311,7 +339,12 @@ pub fn install(
         return Err(format!("版本 {version} 已安装"));
     }
     std::fs::create_dir_all(dest.join("bin")).map_err(|e| format!("创建安装目录失败: {e}"))?;
-    for bin in ["redis-server", "redis-cli", "redis-check-aof", "redis-check-rdb"] {
+    for bin in [
+        "redis-server",
+        "redis-cli",
+        "redis-check-aof",
+        "redis-check-rdb",
+    ] {
         let src = src_dir.join("src").join(bin);
         if src.is_file() {
             std::fs::copy(&src, dest.join("bin").join(bin))
@@ -347,7 +380,14 @@ fn download_with_fallback(
 ) -> Result<(), String> {
     let fallback = format!("https://github.com/redis/redis/archive/refs/tags/{version}.tar.gz");
     if download(app, kind, version, primary, dest).is_err() {
-        emit(app, kind, version, "downloading", None, "官方源不可用，切换 GitHub 镜像…");
+        emit(
+            app,
+            kind,
+            version,
+            "downloading",
+            None,
+            "官方源不可用，切换 GitHub 镜像…",
+        );
         download(app, kind, version, &fallback, dest)?;
     }
     Ok(())
@@ -370,7 +410,9 @@ fn download(
         .set("User-Agent", "NovaEnv/1.0")
         .call()
         .map_err(|e| format!("下载失败（{url}）: {e}"))?;
-    let total = resp.header("Content-Length").and_then(|v| v.parse::<u64>().ok());
+    let total = resp
+        .header("Content-Length")
+        .and_then(|v| v.parse::<u64>().ok());
     let mut reader = resp.into_reader();
     let mut file = std::fs::File::create(dest).map_err(|e| format!("创建文件失败: {e}"))?;
     let mut buf = [0u8; 64 * 1024];
@@ -387,7 +429,7 @@ fn download(
         written += n as u64;
         if let Some(total) = total {
             if total > 0 {
-                let pct = ((written * 100) / total) as i64;
+                let pct = written.checked_mul(100).map(|v| v / total).unwrap_or(0) as i64;
                 if pct != last_pct {
                     last_pct = pct;
                     let mb = |b: u64| format!("{:.1}", b as f64 / 1024.0 / 1024.0);
@@ -403,9 +445,17 @@ fn download(
             }
         } else {
             // 无 Content-Length：每 4MB 报一次已下载量（indeterminate 进度）
-            if written / (4 * 1024 * 1024) as u64 > (written - n as u64) / (4 * 1024 * 1024) as u64 {
+            if written / (4 * 1024 * 1024) as u64 > (written - n as u64) / (4 * 1024 * 1024) as u64
+            {
                 let mb = format!("{:.1}", written as f64 / 1024.0 / 1024.0);
-                emit(app, kind, version, "downloading", None, &format!("已下载 {mb} MB"));
+                emit(
+                    app,
+                    kind,
+                    version,
+                    "downloading",
+                    None,
+                    &format!("已下载 {mb} MB"),
+                );
             }
         }
     }
