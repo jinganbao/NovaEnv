@@ -29,17 +29,17 @@ const busy = ref(false);
 /** 正在执行的操作（版本 → 动作），用于按钮文案反馈 */
 const acting = ref<{ version: string; action: "start" | "stop" | "restart" } | null>(null);
 const result = ref<{ ok: boolean; text: string } | null>(null);
-let resultTimer: number | undefined;
+/** 视口内 Toast（固定右上角，任何滚动位置可见） */
+const toast = ref<{ ok: boolean; text: string } | null>(null);
+let toastTimer: number | undefined;
 const progress = ref<ServiceProgress | null>(null);
 let unlisten: (() => void) | null = null;
 
-/** 显示操作结果（成功 3 秒自动消失，失败常驻） */
-function showResult(ok: boolean, text: string) {
-  result.value = { ok, text };
-  window.clearTimeout(resultTimer);
-  if (ok) {
-    resultTimer = window.setTimeout(() => (result.value = null), 3000);
-  }
+/** 显示操作反馈：toast 固定右上角（成功 2.5s 自动消失，失败 5s 常驻） */
+function showToast(ok: boolean, text: string) {
+  toast.value = { ok, text };
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => (toast.value = null), ok ? 2500 : 5000);
 }
 
 // 安装配置（端口/密码）：默认端口取服务实际默认（redis 6379 / mysql 3306）
@@ -182,10 +182,10 @@ async function doStart(version: string) {
   result.value = null;
   try {
     await startService(props.service.kind, version);
-    showResult(true, `${props.service.name} ${version} 已启动`);
+    showToast(true, `${props.service.name} ${version} 已启动`);
     emit("refresh");
   } catch (e) {
-    showResult(false, `启动失败: ${e}`);
+    showToast(false, `启动失败: ${e}`);
   } finally {
     busy.value = false;
     acting.value = null;
@@ -199,10 +199,10 @@ async function doStop(version: string) {
   result.value = null;
   try {
     await stopService(props.service.kind, version);
-    showResult(true, `${props.service.name} ${version} 已停止`);
+    showToast(true, `${props.service.name} ${version} 已停止`);
     emit("refresh");
   } catch (e) {
-    showResult(false, `停止失败: ${e}`);
+    showToast(false, `停止失败: ${e}`);
   } finally {
     busy.value = false;
     acting.value = null;
@@ -216,10 +216,10 @@ async function doRestart(version: string) {
   result.value = null;
   try {
     await restartService(props.service.kind, version);
-    showResult(true, `${props.service.name} ${version} 已重启`);
+    showToast(true, `${props.service.name} ${version} 已重启`);
     emit("refresh");
   } catch (e) {
-    showResult(false, `重启失败: ${e}`);
+    showToast(false, `重启失败: ${e}`);
   } finally {
     busy.value = false;
     acting.value = null;
@@ -251,6 +251,18 @@ onUnmounted(() => unlisten?.());
 
 <template>
   <div class="svc">
+    <!-- 操作反馈 Toast（固定右上角，视口内始终可见） -->
+    <Transition name="toast">
+      <div
+        v-if="toast"
+        class="op-toast"
+        :class="toast.ok ? 'op-toast-ok' : 'op-toast-err'"
+      >
+        <span class="op-toast-icon">{{ toast.ok ? "✓" : "✕" }}</span>
+        <span>{{ toast.text }}</span>
+      </div>
+    </Transition>
+
     <div class="page-head">
       <span
         class="head-icon"
@@ -891,5 +903,64 @@ onUnmounted(() => unlisten?.());
 
 .dot-off {
   background: currentColor;
+}
+
+/* 操作反馈 Toast */
+.op-toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-md);
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid;
+  max-width: 380px;
+}
+
+.op-toast-ok {
+  background: var(--bg-panel);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.op-toast-err {
+  background: var(--bg-panel);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.op-toast-icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.op-toast-ok .op-toast-icon {
+  background: var(--success-soft);
+}
+
+.op-toast-err .op-toast-icon {
+  background: var(--danger-soft);
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 </style>
