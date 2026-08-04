@@ -73,10 +73,10 @@ export function listServices(): Promise<ServiceInfo[]> {
   return invoke("list_services");
 }
 
-/** 服务的可安装版本列表（最新在前） */
+/** 服务的可安装版本（按大版本分组，最新在前） */
 export function availableServiceVersions(
   kind: ServiceKind,
-): Promise<string[]> {
+): Promise<AvailableVersionGroup[]> {
   return invoke("available_service_versions", { kind });
 }
 

@@ -9,19 +9,25 @@ import {
   stopService,
   uninstallService,
 } from "../api";
-import type { ServiceInfo, ServiceProgress } from "../types";
+import type { AvailableVersionGroup, ServiceInfo, ServiceProgress } from "../types";
 
 const props = defineProps<{ service: ServiceInfo }>();
 const emit = defineEmits<{ (e: "refresh"): void }>();
 
-const versions = ref<string[]>([]);
+const versions = ref<AvailableVersionGroup[]>([]);
 const loadingVersions = ref(false);
 const busy = ref(false);
 const result = ref<{ ok: boolean; text: string } | null>(null);
 const progress = ref<ServiceProgress | null>(null);
 let unlisten: (() => void) | null = null;
 
-const latest = computed(() => versions.value[0] ?? "");
+/** 已安装版本所属大版本（用于行内标注） */
+const installedMajor = computed(() => props.service.version?.split(".")[0] ?? "");
+
+/** 已安装版本是否为某大版本最新（无更新则隐藏升级按钮） */
+function isUpToDate(g: AvailableVersionGroup): boolean {
+  return installedMajor.value === g.major && props.service.version === g.latest;
+}
 
 async function loadVersions() {
   if (!props.service.installed) {
@@ -36,14 +42,14 @@ async function loadVersions() {
   }
 }
 
-async function doInstall() {
-  if (busy.value || !latest.value) return;
+async function doInstall(target: string) {
+  if (busy.value || !target) return;
   busy.value = true;
   result.value = null;
   progress.value = null;
   try {
-    await installService(props.service.kind, latest.value);
-    result.value = { ok: true, text: `Redis ${latest.value} 安装完成` };
+    await installService(props.service.kind, target);
+    result.value = { ok: true, text: `Redis ${target} 安装完成` };
     emit("refresh");
   } catch (e) {
     result.value = { ok: false, text: `安装失败: ${e}` };
@@ -173,19 +179,34 @@ onUnmounted(() => unlisten?.());
       </div>
     </div>
 
-    <!-- 安装面板 -->
+    <!-- 安装面板：按大版本分组 -->
     <div v-else class="svc-card">
       <div class="svc-install">
         <p class="svc-install-tip">
           安装 {{ service.name }}（自动下载源码并编译，约 1-2 分钟）
         </p>
         <div v-if="loadingVersions" class="svc-muted">正在获取版本列表…</div>
-        <div v-else-if="versions.length" class="svc-install-row">
-          <span class="svc-key">版本</span>
-          <span class="svc-val">{{ latest }}</span>
-          <button class="btn primary" :disabled="busy" @click="doInstall">
-            {{ busy ? "安装中…" : "安装" }}
-          </button>
+        <div v-else-if="versions.length" class="svc-groups">
+          <div v-for="g in versions" :key="g.major" class="svc-group-row">
+            <span class="svc-major">{{ service.name }} {{ g.major }}</span>
+            <span class="svc-val">{{ g.latest }}</span>
+            <span
+              v-if="installedMajor === g.major"
+              class="badge"
+              :class="isUpToDate(g) ? 'badge-stopped' : 'badge-upgrade'"
+            >
+              {{ isUpToDate(g) ? "已是最新" : "有新版本" }}
+            </span>
+            <button
+              v-if="!isUpToDate(g)"
+              class="btn primary small"
+              :disabled="busy"
+              @click="doInstall(g.latest)"
+            >
+              {{ installedMajor === g.major ? `升级到 ${g.latest}` : "安装" }}
+            </button>
+            <span v-else class="svc-muted">已安装 {{ service.version }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -303,6 +324,40 @@ onUnmounted(() => unlisten?.());
 .svc-install-tip {
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+.svc-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.svc-group-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-app);
+}
+
+.svc-major {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.btn.small {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
+.badge-upgrade {
+  color: var(--brand);
+  border-color: var(--brand);
 }
 
 .svc-install-row {

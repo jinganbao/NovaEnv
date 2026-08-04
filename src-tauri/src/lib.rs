@@ -71,11 +71,13 @@ fn list_services() -> Vec<ServiceInfo> {
     services::list_all()
 }
 
-/// 服务的可安装版本列表（最新在前）。
+/// 服务的可安装版本列表（按大版本分组，最新在前）。
 #[tauri::command]
-fn available_service_versions(kind: ServiceKind) -> Result<Vec<String>, String> {
+fn available_service_versions(
+    kind: ServiceKind,
+) -> Result<Vec<AvailableVersionGroup>, String> {
     match kind {
-        ServiceKind::Redis => services::redis::available_versions(),
+        ServiceKind::Redis => services::redis::available_version_groups(),
     }
 }
 

@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use tauri::Emitter;
 
-use crate::models::{ServiceInfo, ServiceKind, ServiceProgress};
+use crate::models::{AvailableVersionGroup, ServiceInfo, ServiceKind, ServiceProgress};
 
 const NAME: &str = "Redis";
 const PORT: u16 = 6379;
@@ -145,6 +145,31 @@ const FALLBACK_VERSIONS: &[&str] = &[
     "8.10.0", "8.8.1", "8.6.5", "8.4.0", "8.2.1", "8.0.4", "7.4.4", "7.2.8", "7.0.15",
     "6.2.17", "6.0.20",
 ];
+
+/// 服务可安装版本（按大版本分组，最新在前；官方源不可达时回退内置版本表）
+pub fn available_version_groups() -> Result<Vec<AvailableVersionGroup>, String> {
+    let versions = available_versions()?;
+    Ok(group_versions(&versions))
+}
+
+/// 扁平版本列表 → 按大版本分组（versions 已倒序，每组首个即最新）
+fn group_versions(versions: &[String]) -> Vec<AvailableVersionGroup> {
+    let mut groups: Vec<AvailableVersionGroup> = Vec::new();
+    for v in versions {
+        let major = v.split('.').next().unwrap_or(v).to_string();
+        if let Some(g) = groups.iter_mut().find(|g| g.major == major) {
+            g.versions.push(v.clone());
+        } else {
+            groups.push(AvailableVersionGroup {
+                major,
+                is_lts: false,
+                versions: vec![v.clone()],
+                latest: v.clone(),
+            });
+        }
+    }
+    groups
+}
 
 /// 可用版本列表（官方 download.redis.io/releases/ 目录解析，最新在前；
 /// 官方源不可达时回退内置版本表，保证功能可用）
