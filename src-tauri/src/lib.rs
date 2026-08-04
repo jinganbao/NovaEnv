@@ -11,7 +11,7 @@ mod services;
 use activation::ActivationPreview;
 use models::{
     AvailableVersionGroup, InstallRequest, InstallResult, ManageInfo, RuntimesPayload,
-    RuntimeKind, RuntimeVersion, ServiceInfo, ServiceInstallRequest, ServiceKind,
+    RuntimeKind, RuntimeVersion, ServiceConfig, ServiceInfo, ServiceInstallRequest, ServiceKind,
 };
 
 /// 扫描全部运行时（JDK / Node / Go），返回概览 + 完整版本列表。
@@ -78,10 +78,11 @@ fn available_service_versions(
 ) -> Result<Vec<AvailableVersionGroup>, String> {
     match kind {
         ServiceKind::Redis => services::redis::available_version_groups(),
+        ServiceKind::MySql => services::mysql::available_version_groups(),
     }
 }
 
-/// 安装服务（异步执行，进度经 `service-progress` 事件推送）。
+/// 安装服务（异步执行，进度经 `service-progress` 事件推送；支持端口/密码配置）。
 #[tauri::command]
 async fn install_service(
     app: tauri::AppHandle,
@@ -90,84 +91,140 @@ async fn install_service(
     tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "macos")]
         {
-            services::redis::install(&app, request.kind, &request.version)
+            match request.kind {
+                ServiceKind::Redis => services::redis::install(
+                    &app,
+                    request.kind,
+                    &request.version,
+                    request.port,
+                    request.password,
+                ),
+                ServiceKind::MySql => services::mysql::install(
+                    &app,
+                    request.kind,
+                    &request.version,
+                    request.port,
+                    request.password,
+                ),
+            }
         }
         #[cfg(not(target_os = "macos"))]
         {
             let _ = (&app, request);
-            Err("当前平台暂不支持 Redis 安装".to_string())
+            Err("当前平台暂不支持服务安装".to_string())
         }
     })
     .await
     .map_err(|e| format!("安装任务异常: {e}"))?
 }
 
+/// 修改服务运行配置（端口 / 密码）；运行中自动重启生效。
+#[tauri::command]
+async fn update_service_config(
+    kind: ServiceKind,
+    version: String,
+    config: ServiceConfig,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        {
+            match kind {
+                ServiceKind::Redis => services::redis::update_config(&version, &config),
+                ServiceKind::MySql => services::mysql::update_config(&version, &config),
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (kind, version, config);
+            Err("当前平台暂不支持服务配置".to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("配置任务异常: {e}"))?
+}
+
 /// 卸载服务（保留数据目录）。
 #[tauri::command]
-fn uninstall_service(kind: ServiceKind, version: String) -> Result<(), String> {
-    match kind {
-        ServiceKind::Redis => {
-            #[cfg(target_os = "macos")]
-            {
-                services::redis::uninstall(&version)
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                Err("当前平台暂不支持 Redis 卸载".to_string())
+async fn uninstall_service(kind: ServiceKind, version: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        {
+            match kind {
+                ServiceKind::Redis => services::redis::uninstall(&version),
+                ServiceKind::MySql => services::mysql::uninstall(&version),
             }
         }
-    }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (kind, version);
+            Err("当前平台暂不支持服务卸载".to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("卸载任务异常: {e}"))?
 }
 
-/// 启动服务。
+/// 启动服务（异步，不阻塞界面）。
 #[tauri::command]
-fn start_service(kind: ServiceKind, version: String) -> Result<(), String> {
-    match kind {
-        ServiceKind::Redis => {
-            #[cfg(target_os = "macos")]
-            {
-                services::redis::start(&version)
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                Err("当前平台暂不支持 Redis".to_string())
+async fn start_service(kind: ServiceKind, version: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        {
+            match kind {
+                ServiceKind::Redis => services::redis::start(&version),
+                ServiceKind::MySql => services::mysql::start(&version),
             }
         }
-    }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (kind, version);
+            Err("当前平台暂不支持服务".to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("启动任务异常: {e}"))?
 }
 
-/// 停止服务。
+/// 停止服务（异步，不阻塞界面）。
 #[tauri::command]
-fn stop_service(kind: ServiceKind, version: String) -> Result<(), String> {
-    match kind {
-        ServiceKind::Redis => {
-            #[cfg(target_os = "macos")]
-            {
-                services::redis::stop(&version)
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                Err("当前平台暂不支持 Redis".to_string())
+async fn stop_service(kind: ServiceKind, version: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        {
+            match kind {
+                ServiceKind::Redis => services::redis::stop(&version),
+                ServiceKind::MySql => services::mysql::stop(&version),
             }
         }
-    }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (kind, version);
+            Err("当前平台暂不支持服务".to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("停止任务异常: {e}"))?
 }
 
-/// 重启服务。
+/// 重启服务（异步，不阻塞界面）。
 #[tauri::command]
-fn restart_service(kind: ServiceKind, version: String) -> Result<(), String> {
-    match kind {
-        ServiceKind::Redis => {
-            #[cfg(target_os = "macos")]
-            {
-                services::redis::restart(&version)
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                Err("当前平台暂不支持 Redis".to_string())
+async fn restart_service(kind: ServiceKind, version: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        {
+            match kind {
+                ServiceKind::Redis => services::redis::restart(&version),
+                ServiceKind::MySql => services::mysql::restart(&version),
             }
         }
-    }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (kind, version);
+            Err("当前平台暂不支持服务".to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("重启任务异常: {e}"))?
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -186,6 +243,7 @@ pub fn run() {
             list_services,
             available_service_versions,
             install_service,
+            update_service_config,
             uninstall_service,
             start_service,
             stop_service,

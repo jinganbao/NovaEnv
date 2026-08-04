@@ -5,11 +5,12 @@
 //! 2. 在 `services/` 新建 `<name>.rs` 实现安装/启停逻辑；
 //! 3. 在 `list_all()` 中注册。
 
+pub mod mysql;
 pub mod redis;
 
 use crate::models::ServiceInfo;
 
 /// 全部服务组件状态
 pub fn list_all() -> Vec<ServiceInfo> {
-    vec![redis::info()]
+    vec![redis::info(), mysql::info()]
 }

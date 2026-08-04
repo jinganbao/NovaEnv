@@ -3,7 +3,7 @@
 export type RuntimeKind = "java" | "node" | "go" | "maven";
 
 /** 服务类组件类型 */
-export type ServiceKind = "redis";
+export type ServiceKind = "redis" | "mysql";
 
 /** 服务状态信息（list_services 返回） */
 export interface ServiceInfo {
@@ -20,10 +20,19 @@ export interface ServiceInfo {
   port: number;
   /** 进程 PID（运行中时） */
   pid: number | null;
+  /** 当前访问密码（空表示未设置） */
+  password: string;
   /** 数据目录 */
   dataDir: string;
   /** 平台支持说明（如 Windows 暂不支持） */
   note: string | null;
+}
+
+/** 服务运行配置（端口 / 密码），用于安装与修改 */
+export interface ServiceConfig {
+  port: number;
+  /** 空字符串表示无密码 */
+  password: string;
 }
 
 /** 服务安装进度事件 */

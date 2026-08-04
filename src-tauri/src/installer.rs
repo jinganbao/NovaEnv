@@ -192,10 +192,10 @@ fn download_url(kind: RuntimeKind, version: &str) -> Result<(String, PathBuf), S
 }
 
 /// HEAD 探测 URL 是否可用（镜像源选择用；跟随重定向，最终 200 视为可用）
-fn url_exists(url: &str) -> bool {
+pub(crate) fn url_exists(url: &str) -> bool {
     let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(5))
-        .timeout_read(Duration::from_secs(8))
+        .timeout_connect(Duration::from_secs(15))
+        .timeout_read(Duration::from_secs(20))
         .build();
     agent
         .head(url)

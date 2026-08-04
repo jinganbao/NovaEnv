@@ -12,6 +12,7 @@ import type {
   ServiceInfo,
   ServiceKind,
   ServiceProgress,
+  ServiceConfig,
 } from "./types";
 
 /** 扫描全部运行时：概览 + 版本列表 */
@@ -80,12 +81,24 @@ export function availableServiceVersions(
   return invoke("available_service_versions", { kind });
 }
 
-/** 安装服务（进度经 service-progress 事件推送） */
+/** 安装服务（进度经 service-progress 事件推送；支持端口/密码配置） */
 export function installService(
   kind: ServiceKind,
   version: string,
+  config?: { port?: number; password?: string },
 ): Promise<void> {
-  return invoke("install_service", { request: { kind, version } });
+  return invoke("install_service", {
+    request: { kind, version, port: config?.port ?? null, password: config?.password ?? null },
+  });
+}
+
+/** 修改服务运行配置（端口/密码）；运行中自动重启生效 */
+export function updateServiceConfig(
+  kind: ServiceKind,
+  version: string,
+  config: ServiceConfig,
+): Promise<void> {
+  return invoke("update_service_config", { kind, version, config });
 }
 
 /** 卸载服务（保留数据目录） */

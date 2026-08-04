@@ -16,10 +16,10 @@ use std::time::Duration;
 
 use tauri::Emitter;
 
-use crate::models::{AvailableVersionGroup, ServiceInfo, ServiceKind, ServiceProgress};
+use crate::models::{AvailableVersionGroup, ServiceConfig, ServiceInfo, ServiceKind, ServiceProgress};
 
 const NAME: &str = "Redis";
-const PORT: u16 = 6379;
+const DEFAULT_PORT: u16 = 6379;
 /// 服务根目录 ~/.novaenv/services
 fn services_dir() -> PathBuf {
     crate::installer::installs_dir().parent().unwrap().join("services")
@@ -59,14 +59,16 @@ pub fn info() -> ServiceInfo {
     {
         let installed = latest_installed();
         let running = installed.as_ref().is_some_and(|v| is_running(v));
+        let conf = installed.as_ref().and_then(|v| read_conf(v));
         ServiceInfo {
             kind: ServiceKind::Redis,
             name: NAME.to_string(),
             installed: installed.is_some(),
             version: installed.clone(),
             running,
-            port: PORT,
+            port: conf.as_ref().map(|c| c.port).unwrap_or(DEFAULT_PORT),
             pid: installed.as_ref().and_then(|v| read_pid(v)),
+            password: conf.map(|c| c.password).unwrap_or_default(),
             data_dir: installed
                 .as_ref()
                 .map(|v| data_root().join("redis").join(v).to_string_lossy().into_owned())
@@ -82,7 +84,7 @@ pub fn info() -> ServiceInfo {
             installed: false,
             version: None,
             running: false,
-            port: PORT,
+            port: DEFAULT_PORT,
             pid: None,
             data_dir: String::new(),
             note: Some("当前平台暂不支持 Redis（官方无 Windows 发行版）".to_string()),
@@ -116,17 +118,19 @@ pub fn is_port_open(port: u16) -> bool {
     std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
 }
 
-/// 某版本是否运行中：pid 文件存在且进程存活
+/// 某版本是否运行中：仅认 NovaEnv 启动的实例（pid 文件 + 进程存活 + 端口开放）
+/// 不靠端口猜测——避免把用户已有的 Redis（6379）误判为自己的实例
 #[cfg(target_os = "macos")]
 fn is_running(version: &str) -> bool {
-    match read_pid(version) {
-        Some(pid) => {
-            // macOS 下 kill(pid, 0) 检测进程存活
-            let alive = unsafe { libc::kill(pid as i32, 0) == 0 };
-            alive && is_port_open(PORT)
-        }
-        None => is_port_open(PORT),
+    let Some(pid) = read_pid(version) else {
+        return false;
+    };
+    let alive = unsafe { libc::kill(pid as i32, 0) == 0 };
+    if !alive {
+        return false;
     }
+    let port = read_conf(version).map(|c| c.port).unwrap_or(DEFAULT_PORT);
+    is_port_open(port)
 }
 
 #[cfg(target_os = "macos")]
@@ -219,11 +223,14 @@ fn cmp_versions(a: &str, b: &str) -> std::cmp::Ordering {
 
 /// 安装 Redis 版本（下载 → 解压 → 编译 → 布局）。
 /// 仅 macOS；进度经 `service-progress` 事件推送。
+/// `port`/`password` 为安装配置（缺省用默认端口/无密码）。
 #[cfg(target_os = "macos")]
 pub fn install(
     app: &tauri::AppHandle,
     kind: ServiceKind,
     version: &str,
+    port: Option<u16>,
+    password: Option<String>,
 ) -> Result<(), String> {
     // 编译环境检查
     for tool in ["make", "cc"] {
@@ -260,14 +267,23 @@ pub fn install(
         return Err("Redis 源码目录结构异常，请重试".to_string());
     }
 
-    // 3) 编译（make -j）
+    // 3) 编译（make -j，仅构建核心二进制目标——默认 make 会附带构建
+    //    可选模块（redisearch/redisjson 等），其依赖较新 make 4.x 与额外
+    //    依赖，在 macOS 自带 make 3.81 上必然失败；核心 server 不受影响）
     emit(app, kind, version, "compiling", None, "编译中（约 1-2 分钟）…");
     let jobs = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4)
         .min(8);
     let status = Command::new("make")
-        .args(["-j", &jobs.to_string()])
+        .args([
+            "-j",
+            &jobs.to_string(),
+            "redis-server",
+            "redis-cli",
+            "redis-check-aof",
+            "redis-check-rdb",
+        ])
         .current_dir(&src_dir)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -299,7 +315,11 @@ pub fn install(
     if src_dir.join("redis.conf").is_file() {
         let _ = std::fs::copy(src_dir.join("redis.conf"), dest.join("redis.conf.default"));
     }
-    write_conf(version, &dest)?;
+    let config = ServiceConfig {
+        port: port.unwrap_or(DEFAULT_PORT),
+        password: password.unwrap_or_default(),
+    };
+    write_conf(version, &dest, &config)?;
 
     // 5) 清理
     let _ = std::fs::remove_dir_all(&tmp);
@@ -385,22 +405,79 @@ fn download(
     Ok(())
 }
 
-/// 生成运行配置（daemonize + pidfile + 数据/日志目录）
+/// 生成运行配置（daemonize + pidfile + 数据/日志目录 + 端口/密码）
 #[cfg(target_os = "macos")]
-fn write_conf(version: &str, dest: &Path) -> Result<(), String> {
+fn write_conf(version: &str, dest: &Path, config: &ServiceConfig) -> Result<(), String> {
     let data_dir = data_root().join("redis").join(version);
     let log_file = logs_dir().join(format!("redis-{version}.log"));
     std::fs::create_dir_all(&data_dir).map_err(|e| format!("创建数据目录失败: {e}"))?;
     std::fs::create_dir_all(logs_dir()).map_err(|e| format!("创建日志目录失败: {e}"))?;
     std::fs::create_dir_all(run_dir()).map_err(|e| format!("创建运行目录失败: {e}"))?;
 
-    let conf = format!(
-        "port {PORT}\ndaemonize yes\npidfile {}\ndir {}\nlogfile {}\nsave 900 1\nsave 300 10\nsave 60 10000\nappendonly yes\nappendfilename appendonly.aof\n",
+    let mut conf = format!(
+        "port {}\ndaemonize yes\npidfile {}\ndir {}\nlogfile {}\nsave 900 1\nsave 300 10\nsave 60 10000\nappendonly yes\nappendfilename appendonly.aof\n",
+        config.port,
         pid_file(version).display(),
         data_dir.display(),
         log_file.display(),
     );
+    if !config.password.is_empty() {
+        conf.push_str(&format!("requirepass {}\n", config.password));
+    }
     std::fs::write(dest.join("redis.conf"), conf).map_err(|e| format!("写配置文件失败: {e}"))
+}
+
+/// 读取版本实际运行配置（端口 / 密码），无配置文件时返回默认值
+#[cfg(target_os = "macos")]
+pub fn read_conf(version: &str) -> Option<ServiceConfig> {
+    let content = std::fs::read_to_string(conf_file(version)).ok()?;
+    let mut port = DEFAULT_PORT;
+    let mut password = String::new();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once(' ') else {
+            continue;
+        };
+        match key.trim() {
+            "port" => {
+                if let Ok(p) = value.trim().parse::<u16>() {
+                    port = p;
+                }
+            }
+            "requirepass" => password = value.trim().to_string(),
+            _ => {}
+        }
+    }
+    Some(ServiceConfig { port, password })
+}
+
+/// 修改运行配置（端口 / 密码）：校验新端口未被占用 → 重写配置 → 运行中自动重启生效
+#[cfg(target_os = "macos")]
+pub fn update_config(version: &str, config: &ServiceConfig) -> Result<(), String> {
+    let dir = version_dir(version);
+    if !dir.join("bin").join("redis-server").is_file() {
+        return Err(format!("Redis {version} 未安装"));
+    }
+    if config.port == 0 {
+        return Err("端口不能为 0".to_string());
+    }
+    let old = read_conf(version).unwrap_or(ServiceConfig {
+        port: DEFAULT_PORT,
+        password: String::new(),
+    });
+    // 新端口与旧端口不同且已被占用 → 冲突
+    if config.port != old.port && is_port_open(config.port) {
+        return Err(format!("端口 {} 已被占用，请换一个端口", config.port));
+    }
+    write_conf(version, &dir, config)?;
+    // 运行中自动重启使新配置生效
+    if is_running(version) {
+        restart(version)?;
+    }
+    Ok(())
 }
 
 // ---------- 进程管理 ----------
@@ -427,13 +504,14 @@ pub fn start(version: &str) -> Result<(), String> {
         return Err("redis-server 启动失败，请查看日志".to_string());
     }
     // 轮询端口就绪（最多 5s）
+    let port = read_conf(version).map(|c| c.port).unwrap_or(DEFAULT_PORT);
     for _ in 0..25 {
-        if is_port_open(PORT) {
+        if is_port_open(port) {
             return Ok(());
         }
         std::thread::sleep(Duration::from_millis(200));
     }
-    Err(format!("Redis 启动超时（端口 {PORT} 未就绪）"))
+    Err(format!("Redis 启动超时（端口 {port} 未就绪）"))
 }
 
 /// 停止服务：读 pid → SIGTERM → 等待退出 → SIGKILL 兜底
@@ -448,8 +526,10 @@ pub fn stop(version: &str) -> Result<(), String> {
     };
     // SIGTERM
     unsafe { libc::kill(pid as i32, libc::SIGTERM) };
-    for _ in 0..50 {
-        if !is_port_open(PORT) {
+    let port = read_conf(version).map(|c| c.port).unwrap_or(DEFAULT_PORT);
+    // 优雅关闭通常 1-2 秒；4 秒（20×200ms）未关闭则 SIGKILL 兜底
+    for _ in 0..20 {
+        if !is_port_open(port) {
             // 清理残留 pid 文件
             let _ = std::fs::remove_file(pid_file(version));
             return Ok(());

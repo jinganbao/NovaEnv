@@ -127,6 +127,7 @@ pub struct RuntimeOverview {
 #[serde(rename_all = "lowercase")]
 pub enum ServiceKind {
     Redis,
+    MySql,
 }
 
 impl ServiceKind {
@@ -135,6 +136,7 @@ impl ServiceKind {
     pub fn display_name(self) -> &'static str {
         match self {
             ServiceKind::Redis => "Redis",
+            ServiceKind::MySql => "MySQL",
         }
     }
 
@@ -143,6 +145,7 @@ impl ServiceKind {
     pub fn default_port(self) -> u16 {
         match self {
             ServiceKind::Redis => 6379,
+            ServiceKind::MySql => 3306,
         }
     }
 }
@@ -164,6 +167,8 @@ pub struct ServiceInfo {
     pub port: u16,
     /// 进程 PID（运行中时）
     pub pid: Option<u32>,
+    /// 当前访问密码（空表示未设置）
+    pub password: String,
     /// 数据目录
     pub data_dir: String,
     /// 平台支持说明（如 Windows 暂不支持）
@@ -177,6 +182,19 @@ pub struct ServiceInstallRequest {
     pub kind: ServiceKind,
     /// 具体版本号（如 8.10.0）
     pub version: String,
+    /// 服务端口（缺省用默认端口）
+    pub port: Option<u16>,
+    /// 访问密码（缺省为空，不设置）
+    pub password: Option<String>,
+}
+
+/// 服务运行配置（端口 / 密码），用于安装与修改配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceConfig {
+    pub port: u16,
+    /// 空字符串表示无密码
+    pub password: String,
 }
 
 /// 服务安装进度事件（通过 tauri 事件 `service-progress` 推送）

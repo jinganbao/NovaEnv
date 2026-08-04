@@ -27,7 +27,7 @@ import Sidebar from "./components/Sidebar.vue";
 import UninstallModal from "./components/UninstallModal.vue";
 
 const kinds: RuntimeKind[] = ["java", "node", "go", "maven"];
-const serviceKinds = ["redis"] as const;
+const serviceKinds = ["redis", "mysql"] as const;
 
 type Selected = RuntimeKind | (typeof serviceKinds)[number] | "settings";
 
@@ -107,18 +107,21 @@ function serviceOf(kind: ServiceInfo["kind"]): ServiceInfo | undefined {
   return services.value.find((s) => s.kind === kind);
 }
 
-// 服务列表为空时的兜底展示（正常情况 list_services 恒返回 Redis 项）
-const emptyRedis: ServiceInfo = {
-  kind: "redis",
-  name: "Redis",
-  installed: false,
-  version: null,
-  running: false,
-  port: 6379,
-  pid: null,
-  dataDir: "",
-  note: null,
-};
+// 服务列表为空时的兜底展示（正常情况 list_services 恒返回各项）
+function emptyService(kind: ServiceInfo["kind"]): ServiceInfo {
+  return {
+    kind,
+    name: kind === "mysql" ? "MySQL" : "Redis",
+    installed: false,
+    version: null,
+    running: false,
+    port: kind === "mysql" ? 3306 : 6379,
+    pid: null,
+    password: "",
+    dataDir: "",
+    note: null,
+  };
+}
 
 // 服务状态轮询（3s），保证状态点与详情页实时性
 let pollTimer: number | undefined;
@@ -256,8 +259,8 @@ onUnmounted(() => {
         </div>
         <SettingsView v-else-if="selected === 'settings'" />
         <ServiceDetail
-          v-else-if="selected === 'redis'"
-          :service="serviceOf('redis') ?? emptyRedis"
+          v-else-if="selected === 'redis' || selected === 'mysql'"
+          :service="serviceOf(selected) ?? emptyService(selected)"
           @refresh="loadServices"
         />
         <RuntimeDetail

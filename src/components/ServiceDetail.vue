@@ -8,8 +8,14 @@ import {
   startService,
   stopService,
   uninstallService,
+  updateServiceConfig,
 } from "../api";
-import type { AvailableVersionGroup, ServiceInfo, ServiceProgress } from "../types";
+import type {
+  AvailableVersionGroup,
+  ServiceConfig,
+  ServiceInfo,
+  ServiceProgress,
+} from "../types";
 
 const props = defineProps<{ service: ServiceInfo }>();
 const emit = defineEmits<{ (e: "refresh"): void }>();
@@ -20,6 +26,15 @@ const busy = ref(false);
 const result = ref<{ ok: boolean; text: string } | null>(null);
 const progress = ref<ServiceProgress | null>(null);
 let unlisten: (() => void) | null = null;
+
+// 安装配置（端口/密码）：默认端口取服务实际默认（redis 6379 / mysql 3306）
+const installPort = ref(props.service.port || 6379);
+const installPassword = ref("");
+
+// 修改配置弹窗
+const editOpen = ref(false);
+const editPort = ref(6379);
+const editPassword = ref("");
 
 /** 已安装版本所属大版本（用于行内标注） */
 const installedMajor = computed(() => props.service.version?.split(".")[0] ?? "");
@@ -48,11 +63,42 @@ async function doInstall(target: string) {
   result.value = null;
   progress.value = null;
   try {
-    await installService(props.service.kind, target);
+    await installService(props.service.kind, target, {
+      port: installPort.value,
+      password: installPassword.value.trim(),
+    });
     result.value = { ok: true, text: `Redis ${target} 安装完成` };
     emit("refresh");
   } catch (e) {
     result.value = { ok: false, text: `安装失败: ${e}` };
+  } finally {
+    busy.value = false;
+  }
+}
+
+/** 打开修改配置弹窗（预填当前配置） */
+function openEdit() {
+  editPort.value = props.service.port;
+  editPassword.value = props.service.password;
+  editOpen.value = true;
+}
+
+/** 保存配置修改；运行中自动重启生效 */
+async function saveEdit() {
+  if (busy.value || !props.service.version) return;
+  busy.value = true;
+  result.value = null;
+  try {
+    const config: ServiceConfig = {
+      port: editPort.value,
+      password: editPassword.value.trim(),
+    };
+    await updateServiceConfig(props.service.kind, props.service.version, config);
+    editOpen.value = false;
+    result.value = { ok: true, text: "配置已保存" + (props.service.running ? "，服务已自动重启生效" : "") };
+    emit("refresh");
+  } catch (e) {
+    result.value = { ok: false, text: `保存失败: ${e}` };
   } finally {
     busy.value = false;
   }
@@ -156,6 +202,10 @@ onUnmounted(() => unlisten?.());
         <span class="svc-val">{{ service.pid ?? "—" }}</span>
       </div>
       <div class="svc-row">
+        <span class="svc-key">密码</span>
+        <span class="svc-val">{{ service.password ? "已设置 ●●●" : "未设置" }}</span>
+      </div>
+      <div class="svc-row">
         <span class="svc-key">数据目录</span>
         <span class="svc-val path">{{ service.dataDir }}</span>
       </div>
@@ -173,6 +223,7 @@ onUnmounted(() => unlisten?.());
           <button class="btn" :disabled="busy" @click="doStop">停止</button>
           <button class="btn" :disabled="busy" @click="doRestart">重启</button>
         </template>
+        <button class="btn" :disabled="busy" @click="openEdit">修改配置</button>
         <button class="btn danger" :disabled="busy" @click="doUninstall">
           卸载
         </button>
@@ -207,6 +258,29 @@ onUnmounted(() => unlisten?.());
             </button>
             <span v-else class="svc-muted">已安装 {{ service.version }}</span>
           </div>
+
+          <!-- 安装配置：端口 / 密码 -->
+          <div class="svc-config">
+            <label class="cfg-field">
+              <span class="cfg-label">端口</span>
+              <input
+                v-model.number="installPort"
+                type="number"
+                min="1"
+                max="65535"
+                class="cfg-input"
+              />
+            </label>
+            <label class="cfg-field">
+              <span class="cfg-label">密码（可选）</span>
+              <input
+                v-model="installPassword"
+                type="password"
+                placeholder="留空则不设置密码"
+                class="cfg-input"
+              />
+            </label>
+          </div>
         </div>
       </div>
     </div>
@@ -228,6 +302,33 @@ onUnmounted(() => unlisten?.());
 
     <div v-if="result" :class="['svc-result', result.ok ? 'ok' : 'err']">
       {{ result.text }}
+    </div>
+
+    <!-- 修改配置弹窗 -->
+    <div v-if="editOpen" class="modal-mask" @click.self="!busy && (editOpen = false)">
+      <div class="modal">
+        <h3>修改 Redis 配置</h3>
+        <p class="modal-sub">运行中保存后自动重启生效</p>
+        <div class="cfg-field">
+          <span class="cfg-label">端口</span>
+          <input v-model.number="editPort" type="number" min="1" max="65535" class="cfg-input" />
+        </div>
+        <div class="cfg-field">
+          <span class="cfg-label">密码</span>
+          <input
+            v-model="editPassword"
+            type="password"
+            placeholder="留空表示无密码"
+            class="cfg-input"
+          />
+        </div>
+        <div class="actions">
+          <button class="btn" :disabled="busy" @click="editOpen = false">取消</button>
+          <button class="btn primary" :disabled="busy" @click="saveEdit">
+            {{ busy ? "保存中…" : "保存" }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -358,6 +459,75 @@ onUnmounted(() => unlisten?.());
 .badge-upgrade {
   color: var(--brand);
   border-color: var(--brand);
+}
+
+/* 安装/修改配置输入 */
+.svc-config {
+  display: flex;
+  gap: 14px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.cfg-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cfg-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.cfg-input {
+  width: 130px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+}
+
+.modal {
+  width: min(400px, 92vw);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 22px 24px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal h3 {
+  font-size: 16px;
+}
+
+.modal-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: -8px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
 }
 
 .svc-install-row {

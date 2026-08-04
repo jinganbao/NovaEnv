@@ -13,7 +13,7 @@ const emit = defineEmits<{
 }>();
 
 function isKind(value: RuntimeKind | ServiceInfo["kind"] | "settings"): value is RuntimeKind {
-  return value !== "settings" && value !== "redis";
+  return value !== "settings" && value !== "redis" && value !== "mysql";
 }
 </script>
 
