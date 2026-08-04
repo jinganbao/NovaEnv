@@ -607,12 +607,21 @@ pub fn start(version: &str) -> Result<(), String> {
     if !conf.is_file() {
         return Err("配置文件缺失，请重新安装".to_string());
     }
+    // 端口预检：conf 端口被其他进程占用且不是本实例 → 明确报错
+    let port = read_conf(version).map(|c| c.port).unwrap_or(DEFAULT_PORT);
+    if is_port_open(port) {
+        return Err(format!(
+            "端口 {port} 已被占用（可能是旧实例未退出或其他程序），请先停止占用方或更换端口"
+        ));
+    }
     let status = Command::new(&server)
         .arg(conf.as_os_str())
         .status()
         .map_err(|e| format!("启动失败: {e}"))?;
     if !status.success() {
-        return Err("redis-server 启动失败，请查看日志".to_string());
+        // 附带日志尾部定位失败原因
+        let log = crate::services::tail_log_file(&logs_dir().join(format!("redis-{version}.log")), 8).unwrap_or_default();
+        return Err(format!("redis-server 启动失败：{log}"));
     }
     // 轮询端口就绪（最多 5s）
     let port = read_conf(version).map(|c| c.port).unwrap_or(DEFAULT_PORT);

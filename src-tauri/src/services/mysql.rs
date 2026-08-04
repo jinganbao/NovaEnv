@@ -477,6 +477,13 @@ pub fn start(version: &str) -> Result<(), String> {
     if !conf.is_file() {
         return Err("配置文件缺失，请重新安装".to_string());
     }
+    // 端口预检：conf 端口被其他进程占用且不是本实例 → 明确报错
+    let port = read_conf(version).map(|c| c.port).unwrap_or(DEFAULT_PORT);
+    if is_port_open(port) {
+        return Err(format!(
+            "端口 {port} 已被占用（可能是旧实例未退出或其他程序），请先停止占用方或更换端口"
+        ));
+    }
     let log_file = logs_dir().join(format!("mysql-{version}.log"));
     std::fs::create_dir_all(logs_dir()).map_err(|e| format!("创建日志目录失败: {e}"))?;
     let log = std::fs::File::create(&log_file).map_err(|e| format!("创建日志文件失败: {e}"))?;
@@ -499,7 +506,10 @@ pub fn start(version: &str) -> Result<(), String> {
         }
         std::thread::sleep(Duration::from_millis(200));
     }
-    Err(format!("MySQL 启动超时（端口 {port} 未就绪），请查看日志"))
+    Err(format!(
+        "MySQL 启动超时（端口 {port} 未就绪）：{}",
+        crate::services::tail_log_file(&log_file, 10).unwrap_or_default()
+    ))
 }
 
 /// 停止服务：launchd 托管时 bootout，否则 mysqladmin shutdown → SIGTERM 兜底
