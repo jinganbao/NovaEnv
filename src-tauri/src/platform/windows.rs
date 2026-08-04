@@ -1,6 +1,6 @@
 //! Windows 平台辅助：JDK 扫描依赖注册表 `HKLM\SOFTWARE\JavaSoft`。
 
-use winreg::enums::*;
+use winreg::enums::HKEY_LOCAL_MACHINE;
 use winreg::RegKey;
 
 /// 查询注册表 JavaSoft 键下的 JDK 安装信息。

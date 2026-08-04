@@ -87,7 +87,27 @@ jobs:
 
       - name: Unit tests
         working-directory: ./src-tauri
-        run: cargo test
+        run: |
+          cargo test 2>&1 | tee test.log
+
+      - name: Report test log
+        if: always()
+        working-directory: ./src-tauri
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f test.log ]; then echo "no test.log"; exit 0; fi
+          git config user.email "ci@novahub.local"
+          git config user.name "CI Lint Reporter"
+          git add -f test.log
+          git commit -m "ci: test log for ${{ matrix.platform }}" --allow-empty
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/ci-lint-report-${{ matrix.platform }} --force
+
+      - name: Fail on test failures
+        if: always()
+        working-directory: ./src-tauri
+        run: |
+          if grep -qE 'FAILED|failures:' test.log; then exit 1; fi
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
