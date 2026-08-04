@@ -60,6 +60,14 @@ jobs:
             patchelf \
             xdg-utils
 
+      - name: Lint (clippy)
+        working-directory: ./src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Unit tests
+        working-directory: ./src-tauri
+        run: cargo test
+
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
