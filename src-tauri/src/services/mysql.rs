@@ -465,9 +465,6 @@ fn parse_conf(content: &str) -> ServiceConfig {
 /// 启动服务：launchd 托管时走 launchctl，否则 mysqld 后台拉起
 #[cfg(target_os = "macos")]
 pub fn start(version: &str) -> Result<(), String> {
-    if autostart_enabled(version) {
-        return crate::services::launchd::start("mysql", version);
-    }
     let mysqld = bin_dir(version).join("mysqld");
     if !mysqld.is_file() {
         return Err(format!("MySQL {version} 未安装"));

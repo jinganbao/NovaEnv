@@ -596,9 +596,6 @@ pub fn update_config(version: &str, config: &ServiceConfig) -> Result<(), String
 /// 启动服务：launchd 托管时走 launchctl，否则 daemonize 配置拉起
 #[cfg(target_os = "macos")]
 pub fn start(version: &str) -> Result<(), String> {
-    if autostart_enabled(version) {
-        return crate::services::launchd::start("redis", version);
-    }
     let server = version_dir(version).join("bin").join("redis-server");
     if !server.is_file() {
         return Err(format!("Redis {version} 未安装"));

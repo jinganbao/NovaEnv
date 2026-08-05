@@ -205,6 +205,8 @@ function closeUninstall() {
 }
 
 function overviewValue(kind: RuntimeKind): string {
+  const v = payload.value?.versions?.find((v) => v.kind === kind && v.isDefault);
+  if (v) return v.version;
   const value = payload.value?.overview[kind];
   return value && value.trim() !== "" ? value : "未检测到";
 }
