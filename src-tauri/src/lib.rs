@@ -76,24 +76,28 @@ fn app_version() -> String {
 /// 用系统默认浏览器/应用打开链接
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
+    open_url_sys(&url)
+}
+
+fn open_url_sys(url: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
-            .arg(&url)
+            .arg(url)
             .status()
             .map_err(|e| format!("打开链接失败: {e}"))?;
     }
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
-            .args(["/c", "start", "", &url])
+            .args(["/c", "start", "", url])
             .status()
             .map_err(|e| format!("打开链接失败: {e}"))?;
     }
     #[cfg(target_os = "linux")]
     {
         std::process::Command::new("xdg-open")
-            .arg(&url)
+            .arg(url)
             .status()
             .map_err(|e| format!("打开链接失败: {e}"))?;
     }
@@ -436,12 +440,121 @@ fn self_check() {
     }
 }
 
+/// 构建中文系统菜单（macOS 顶部菜单栏 / Windows 菜单）
+/// 关于面板走系统原生 About（版本号、版权、项目主页）
+fn build_menu(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+
+    let app_name = "NovaEnv";
+    let separator = PredefinedMenuItem::separator(app)?;
+
+    // 应用菜单（关于 → 前端弹窗；检查更新紧随其后）
+    let about = MenuItem::with_id(app, "menu-about", "关于 NovaEnv", true, None::<&str>)?;
+    let check_update = MenuItem::with_id(app, "menu-update", "检查更新…", true, None::<&str>)?;
+    let hide = PredefinedMenuItem::hide(app, Some("隐藏 NovaEnv"))?;
+    let hide_others = PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?;
+    let show_all = PredefinedMenuItem::show_all(app, Some("全部显示"))?;
+    let quit = PredefinedMenuItem::quit(app, Some("退出 NovaEnv"))?;
+    let app_menu = Submenu::with_items(
+        app,
+        app_name,
+        true,
+        &[
+            &about,
+            &check_update,
+            &separator,
+            &hide,
+            &hide_others,
+            &show_all,
+            &separator,
+            &quit,
+        ],
+    )?;
+
+    // 编辑菜单（输入框快捷键需要）
+    let undo = PredefinedMenuItem::undo(app, Some("撤销"))?;
+    let redo = PredefinedMenuItem::redo(app, Some("重做"))?;
+    let cut = PredefinedMenuItem::cut(app, Some("剪切"))?;
+    let copy = PredefinedMenuItem::copy(app, Some("拷贝"))?;
+    let paste = PredefinedMenuItem::paste(app, Some("粘贴"))?;
+    let select_all = PredefinedMenuItem::select_all(app, Some("全选"))?;
+    let edit_menu = Submenu::with_items(
+        app,
+        "编辑",
+        true,
+        &[&undo, &redo, &separator, &cut, &copy, &paste, &separator, &select_all],
+    )?;
+
+    // 视图菜单
+    let fullscreen = PredefinedMenuItem::fullscreen(app, Some("进入全屏幕"))?;
+    let view_menu = Submenu::with_items(app, "视图", true, &[&fullscreen])?;
+
+    // 窗口菜单
+    let minimize = PredefinedMenuItem::minimize(app, Some("最小化"))?;
+    let close_window = PredefinedMenuItem::close_window(app, Some("关闭窗口"))?;
+    let window_menu = Submenu::with_items(app, "窗口", true, &[&minimize, &close_window])?;
+
+    // 帮助菜单
+    let help_docs = MenuItem::with_id(app, "help-docs", "使用文档", true, None::<&str>)?;
+    let help_homepage = MenuItem::with_id(app, "help-homepage", "项目主页", true, None::<&str>)?;
+    let help_issues = MenuItem::with_id(app, "help-issues", "报告问题", true, None::<&str>)?;
+    let help_license = MenuItem::with_id(app, "help-license", "开源许可证", true, None::<&str>)?;
+    let help_menu = Submenu::with_items(
+        app,
+        "帮助",
+        true,
+        &[
+            &help_docs,
+            &separator,
+            &help_homepage,
+            &help_issues,
+            &separator,
+            &help_license,
+        ],
+    )?;
+
+    let menu = Menu::with_items(
+        app,
+        &[&app_menu, &edit_menu, &view_menu, &window_menu, &help_menu],
+    )?;
+    app.set_menu(menu)?;
+
+    // 菜单事件：关于 → 前端自定义弹窗（含作者/网站）；检查更新 → 更新弹窗；帮助 → 文档/主页/反馈/许可证
+    app.on_menu_event(|app, event| match event.id().as_ref() {
+        "menu-about" => {
+            use tauri::Emitter;
+            let _ = app.emit("novaenv-about", ());
+        }
+        "menu-update" => {
+            use tauri::Emitter;
+            let _ = app.emit("novaenv-check-update", ());
+        }
+        "help-docs" => {
+            let _ = open_url_sys("https://github.com/jinganbao/NovaEnv#readme");
+        }
+        "help-homepage" => {
+            let _ = open_url_sys("https://github.com/jinganbao/NovaEnv");
+        }
+        "help-issues" => {
+            let _ = open_url_sys("https://github.com/jinganbao/NovaEnv/issues");
+        }
+        "help-license" => {
+            let _ = open_url_sys("https://github.com/jinganbao/NovaEnv/blob/main/LICENSE");
+        }
+        _ => {}
+    });
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     app_log("app", &format!("NovaEnv 启动 v{}", env!("CARGO_PKG_VERSION")));
     tauri::Builder::default()
-        .setup(|_app| {
+        .setup(|app| {
             self_check();
+            if let Err(e) = build_menu(app) {
+                eprintln!("菜单构建失败: {e}");
+            }
             Ok(())
         })
         .plugin(tauri_plugin_process::init())

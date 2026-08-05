@@ -1,6 +1,6 @@
 [package]
 name = "novaenv"
-version = "1.0.12"
+version = "1.0.13"
 description = "NovaEnv - 开发环境可视化管理工具"
 authors = ["NovaHub"]
 edition = "2021"

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { getManageInfo, openExternal } from "../api";
-import { useAppUpdate } from "../composables/useAppUpdate";
+import { getManageInfo } from "../api";
 import { useConfig } from "../composables/useConfig";
 import { themeModeOptions, themePresets, useTheme } from "../composables/useTheme";
 import { RUNTIME_META } from "../types";
@@ -12,25 +11,6 @@ const { setThemeMode } = useTheme(config);
 const presets = themePresets;
 const modeOptions = themeModeOptions;
 const feedback = ref<{ ok: boolean; text: string } | null>(null);
-
-const update = useAppUpdate(config, {
-  error: (m) => (feedback.value = { ok: false, text: m }),
-  success: (m) => (feedback.value = { ok: true, text: m }),
-});
-
-// 解构为顶层 ref（模板中自动解包）
-const {
-  checkingUpdate,
-  showUpdatePanel,
-  updateInfo,
-  installingUpdate,
-  cancellingUpdate,
-  updateProgressPercentage,
-  updateProgressLabel,
-  currentVersion,
-  latestVersion,
-  updateError,
-} = update;
 
 const manageInfo = ref<ManageInfo | null>(null);
 const manageLoading = ref(false);
@@ -55,15 +35,7 @@ async function loadManageInfo() {
 
 onMounted(() => {
   loadManageInfo();
-  update.loadCurrentVersion();
 });
-
-/** 打开项目主页 */
-function openRepo() {
-  openExternal("https://github.com/jinganbao/NovaEnv").catch((e) => {
-    feedback.value = { ok: false, text: `打开链接失败: ${e}` };
-  });
-}
 </script>
 
 <template>
@@ -76,7 +48,7 @@ function openRepo() {
       >
       <div class="head-text">
         <h2>设置</h2>
-        <p>主题 · 更新 · 管理目录</p>
+        <p>主题 · 管理目录</p>
       </div>
     </header>
 
@@ -122,80 +94,6 @@ function openRepo() {
       </div>
     </section>
 
-    <!-- 版本更新 -->
-    <section class="card">
-      <h3>版本更新</h3>
-
-      <div class="row">
-        <span class="row-label">当前版本</span>
-        <span class="row-value">{{ currentVersion ? `v${currentVersion}` : "—" }}</span>
-      </div>
-
-      <div class="row">
-        <span class="row-label">最新版本</span>
-        <span class="row-value">
-          {{ latestVersion ? `v${latestVersion}` : "未检查" }}
-        </span>
-      </div>
-
-      <div class="row">
-        <span class="row-label">自动检查</span>
-        <label class="switch">
-          <input v-model="config.autoCheckUpdate" type="checkbox" />
-          <span class="switch-track"></span>
-        </label>
-        <span class="row-hint">启动时静默检查更新</span>
-      </div>
-
-      <div class="row">
-        <span class="row-label">操作</span>
-        <button
-          class="btn primary"
-          :disabled="checkingUpdate || installingUpdate"
-          @click="update.checkForUpdates()"
-        >
-          {{ checkingUpdate ? "检查中…" : "检查更新" }}
-        </button>
-      </div>
-
-      <!-- 有可用更新 -->
-      <div v-if="showUpdatePanel && updateInfo?.hasUpdate" class="update-panel">
-        <div class="update-title">
-          发现新版本 <strong>v{{ updateInfo.version }}</strong>
-          <span v-if="updateInfo.date" class="row-hint">{{ updateInfo.date }}</span>
-        </div>
-        <div v-if="updateInfo.body" class="update-body">{{ updateInfo.body }}</div>
-
-        <div v-if="installingUpdate" class="progress">
-          <div class="bar">
-            <div
-              class="fill"
-              :style="{ width: updateProgressPercentage + '%' }"
-            ></div>
-          </div>
-          <span class="msg">{{ updateProgressLabel }}</span>
-        </div>
-
-        <div v-if="updateError" class="row-hint error-text">{{ updateError }}</div>
-
-        <div class="update-actions">
-          <template v-if="!installingUpdate">
-            <button class="btn primary" @click="update.handleUpdateDownload()">
-              下载并安装
-            </button>
-            <button class="btn" @click="update.closeUpdatePanel()">稍后</button>
-          </template>
-          <button
-            v-else
-            class="btn"
-            :disabled="cancellingUpdate"
-            @click="update.cancelUpdateDownload()"
-          >
-            取消
-          </button>
-        </div>
-      </div>
-    </section>
 
     <!-- 管理目录 -->
     <section class="card">
@@ -235,23 +133,7 @@ function openRepo() {
       </p>
     </section>
 
-    <!-- 关于 -->
-    <section class="card">
-      <h3>关于</h3>
-      <div class="manage-row">
-        <span class="row-label">NovaEnv</span>
-        <span class="row-value">v{{ currentVersion || "…" }}</span>
-      </div>
-      <div class="manage-row">
-        <span class="row-label">能力</span>
-        <span class="row-value">Java · Node.js · Go · Maven · Python · Redis · MySQL</span>
-      </div>
-      <div class="manage-row">
-        <span class="row-label">项目主页</span>
-        <button class="link-btn" @click="openRepo">github.com/jinganbao/NovaEnv</button>
-      </div>
-      <p class="about-copy">© 2026 NovaHub · MIT License · 本地环境管理工具</p>
-    </section>
+    <!-- 关于已移至系统菜单（NovaEnv → 关于 NovaEnv） -->
   </div>
 </template>
 
@@ -503,27 +385,8 @@ h3 {
   background: #fff;
 }
 
-.update-panel {
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-input);
-  border-radius: 10px;
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
 
-.update-title {
-  font-size: 14px;
-}
 
-.update-body {
-  font-size: 12px;
-  color: var(--text-secondary);
-  white-space: pre-wrap;
-  max-height: 120px;
-  overflow-y: auto;
-}
 
 .progress {
   display: flex;
@@ -550,10 +413,6 @@ h3 {
   color: var(--text-secondary);
 }
 
-.update-actions {
-  display: flex;
-  gap: 10px;
-}
 
 .runtime-detail {
   border-top: 1px dashed var(--border-subtle);

@@ -436,7 +436,10 @@ onUnmounted(() => unlisten?.());
           v-for="v in service.versions"
           :key="v.version"
           class="ver-table-row"
-          :class="{ 'row-expanded': expandedVer === v.version }"
+          :class="{
+            'row-running': runningOf(v.version),
+            'row-expanded': expandedVer === v.version,
+          }"
         >
           <span class="col-ver ver-name">{{ v.version }}</span>
           <span class="col-port">{{ v.port }}</span>
@@ -445,7 +448,9 @@ onUnmounted(() => unlisten?.());
               class="run-dot"
               :class="runningOf(v.version) ? 'run-dot-on' : 'run-dot-off'"
             ></span>
-            {{ runningOf(v.version) ? "运行中" : "已停止" }}
+            <span :class="runningOf(v.version) ? 'status-running' : 'status-stopped'">
+              {{ runningOf(v.version) ? "运行中" : "已停止" }}
+            </span>
           </span>
           <span class="col-auto">
             <span v-if="v.autostart" class="badge badge-brand badge-tiny">自启</span>
@@ -1016,6 +1021,35 @@ onUnmounted(() => unlisten?.());
   margin-left: auto;
 }
 
+/* 顶部状态徽章：更醒目（加粗 + 浓色底 + 实边框） */
+.head-status .badge {
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.head-status .badge-success {
+  background: rgba(74, 222, 128, 0.16);
+  border: 1px solid rgba(74, 222, 128, 0.5);
+  color: var(--success);
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.08);
+}
+
+.head-status .badge-warning {
+  background: rgba(251, 191, 36, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: var(--warning);
+}
+
+.head-status .dot {
+  width: 8px;
+  height: 8px;
+}
+
 .dot {
   width: 6px;
   height: 6px;
@@ -1024,10 +1058,22 @@ onUnmounted(() => unlisten?.());
 
 .dot-on {
   background: currentColor;
+  animation: status-pulse 1.6s ease-in-out infinite;
 }
 
 .dot-off {
   background: currentColor;
+}
+
+/* 运行状态脉冲动画 */
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 /* 操作反馈 Toast */
@@ -1242,6 +1288,29 @@ onUnmounted(() => unlisten?.());
 
 .ver-table-row.row-expanded {
   background: var(--bg-app);
+}
+
+/* 运行中的版本行：绿色微亮 + 左侧标记 */
+.ver-table-row.row-running {
+  background: var(--success-soft);
+}
+
+.ver-table-row.row-running:hover {
+  background: var(--success-soft);
+}
+
+/* 状态文字：运行中绿色加粗，已停止灰色 */
+.status-running {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.status-stopped {
+  color: var(--text-muted);
+}
+
+.run-dot-on {
+  animation: status-pulse 1.6s ease-in-out infinite;
 }
 
 .ver-name {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { listen } from "@tauri-apps/api/event";
 import {
   activate,
   availableVersions,
@@ -23,6 +24,8 @@ import ActivationModal from "./components/ActivationModal.vue";
 import RuntimeDetail from "./components/RuntimeDetail.vue";
 import ServiceDetail from "./components/ServiceDetail.vue";
 import SettingsView from "./components/SettingsView.vue";
+import AboutDialog from "./components/AboutDialog.vue";
+import UpdateDialog from "./components/UpdateDialog.vue";
 import Sidebar from "./components/Sidebar.vue";
 import UninstallModal from "./components/UninstallModal.vue";
 
@@ -72,6 +75,8 @@ const update = useAppUpdate(config, {
 });
 update.autoCheckOnStartup();
 update.loadCurrentVersion();
+/** 更新弹窗显隐（系统菜单「更新 → 检查更新」触发） */
+const updateOpen = ref(false);
 /** 当前应用版本（供 Header / 侧边栏展示） */
 const appVersion = computed(() => update.currentVersion.value || "1.0.5");
 
@@ -219,6 +224,11 @@ onMounted(() => {
   for (const k of kinds) {
     availableVersions(k).catch(() => {});
   }
+  // 系统菜单「更新 → 检查更新」
+  listen("novaenv-check-update", () => {
+    updateOpen.value = true;
+    update.checkForUpdates();
+  }).catch(() => {});
 });
 
 onUnmounted(() => {
@@ -333,6 +343,13 @@ onUnmounted(() => {
       :busy="uninstalling"
       @confirm="doUninstall"
       @cancel="closeUninstall"
+    />
+
+    <AboutDialog />
+    <UpdateDialog
+      v-if="updateOpen"
+      :update="update"
+      :on-close="() => (updateOpen = false)"
     />
   </div>
 </template>
