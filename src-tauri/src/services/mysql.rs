@@ -569,12 +569,6 @@ pub fn restart(version: &str) -> Result<(), String> {
 
 // ---------- 开机自启（launchd） ----------
 
-/// 是否已开启自启（plist 存在）
-#[cfg(target_os = "macos")]
-fn autostart_enabled(version: &str) -> bool {
-    crate::services::launchd::plist_path("mysql", version).exists()
-}
-
 /// 设置/取消开机自启（launchd 托管：RunAtLoad 自启 + KeepAlive 崩溃拉起）
 #[cfg(target_os = "macos")]
 pub fn set_autostart(version: &str, enabled: bool) -> Result<(), String> {

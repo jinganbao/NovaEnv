@@ -177,20 +177,3 @@ pub fn stop(kind: &str, version: &str) -> Result<(), String> {
         .status();
     Ok(())
 }
-
-/// 重启（-k：先终止再启动）
-pub fn restart(kind: &str, version: &str) -> Result<(), String> {
-    let label = label(kind, version);
-    let uid = unsafe { libc::getuid() };
-    if !is_loaded(kind, version) {
-        return start(kind, version);
-    }
-    let status = Command::new("/bin/launchctl")
-        .args(["kickstart", "-k", &format!("gui/{uid}/{label}")])
-        .status()
-        .map_err(|e| format!("launchctl 不可用: {e}"))?;
-    if !status.success() {
-        return Err("launchctl kickstart 失败".to_string());
-    }
-    Ok(())
-}
