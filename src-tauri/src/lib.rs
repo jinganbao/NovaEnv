@@ -344,6 +344,57 @@ async fn service_logs(
     .map_err(|e| format!("日志任务异常: {e}"))?
 }
 
+// ---------- Vision MCP 服务（AI 视觉） ----------
+
+/// Vision 服务状态
+#[tauri::command]
+fn vision_status() -> services::vision::VisionInfo {
+    services::vision::info()
+}
+
+/// 启动 Vision MCP 服务（首次自动部署 + venv + 依赖安装）
+#[tauri::command]
+async fn vision_start(
+    app: tauri::AppHandle,
+    api_key: Option<String>,
+) -> Result<(), String> {
+    let source = resolve_vision_source(&app);
+    tauri::async_runtime::spawn_blocking(move || {
+        services::vision::start(&source, api_key)
+    })
+    .await
+    .map_err(|e| format!("Vision 启动任务异常: {e}"))?
+}
+
+/// 停止 Vision MCP 服务
+#[tauri::command]
+async fn vision_stop() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(services::vision::stop)
+        .await
+        .map_err(|e| format!("Vision 停止任务异常: {e}"))?
+}
+
+/// Vision 服务日志尾部
+#[tauri::command]
+fn vision_logs() -> Result<String, String> {
+    services::vision::logs()
+}
+
+/// 定位 mcp-vision 源目录：打包资源优先，dev 回退仓库目录
+fn resolve_vision_source(app: &tauri::AppHandle) -> std::path::PathBuf {
+    use tauri::Manager;
+    if let Ok(res) = app.path().resource_dir() {
+        let p = res.join("mcp-vision");
+        if p.join("server.py").is_file() {
+            return p;
+        }
+    }
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("mcp-vision")
+}
+
 // ---------- 应用日志 ----------
 
 /// 应用日志：追加写入 ~/.novaenv/logs/app.log（带时间戳）。
@@ -577,6 +628,10 @@ pub fn run() {
             restart_service,
             set_service_autostart,
             service_logs,
+            vision_status,
+            vision_start,
+            vision_stop,
+            vision_logs,
             app_version,
             open_url
         ])

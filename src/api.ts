@@ -10,6 +10,7 @@ import type {
   RuntimeKind,
   RuntimeVersion,
   ServiceInfo,
+  VisionInfo,
   ServiceKind,
   ServiceProgress,
   ServiceConfig,
@@ -168,4 +169,22 @@ export async function getAppVersion(): Promise<string> {
 /** 用系统默认浏览器打开链接 */
 export async function openExternal(url: string): Promise<void> {
   await invoke("open_url", { url });
+}
+
+// ---------- Vision MCP 服务 ----------
+
+export function visionStatus(): Promise<VisionInfo> {
+  return invoke("vision_status");
+}
+
+export function visionStart(apiKey?: string): Promise<void> {
+  return invoke("vision_start", { apiKey });
+}
+
+export function visionStop(): Promise<void> {
+  return invoke("vision_stop");
+}
+
+export function visionLogs(): Promise<string> {
+  return invoke("vision_logs");
 }

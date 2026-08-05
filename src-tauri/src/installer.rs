@@ -934,7 +934,7 @@ fn group_versions(
 }
 
 /// 数字段逐位比较版本号（21.0.12 > 21.0.9；1.24 > 1.23）
-fn compare_versions(a: &str, b: &str) -> Ordering {
+pub fn compare_versions(a: &str, b: &str) -> Ordering {
     let nums = |s: &str| -> Vec<u64> {
         s.split(|c: char| !c.is_ascii_digit())
             .filter_map(|p| p.parse().ok())

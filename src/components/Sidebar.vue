@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import type { RuntimeKind, ServiceInfo } from "../types";
-import { RUNTIME_META, SERVICE_META } from "../types";
+import { RUNTIME_META, SERVICE_META, VISION_META } from "../types";
 
 defineProps<{
   kinds: RuntimeKind[];
-  selected: RuntimeKind | ServiceInfo["kind"] | "settings";
+  selected: RuntimeKind | ServiceInfo["kind"] | "settings" | "vision";
   counts: Record<RuntimeKind, number>;
   services: ServiceInfo[];
+  visionRunning: boolean;
 }>();
 const emit = defineEmits<{
-  (e: "select", kind: RuntimeKind | ServiceInfo["kind"] | "settings"): void;
+  (e: "select", kind: RuntimeKind | ServiceInfo["kind"] | "settings" | "vision"): void;
 }>();
 
 /** 运行时/服务品牌色与字母（来自共享元数据） */
@@ -65,6 +66,22 @@ function metaOf(kind: RuntimeKind | ServiceInfo["kind"]): { letter: string; colo
           "
         ></span>
         <span class="nav-count">{{ s.installed ? s.version : "未安装" }}</span>
+      </button>
+
+      <!-- Vision MCP（AI 视觉服务，独立于版本化服务） -->
+      <button
+        class="nav-item"
+        :class="{ active: selected === 'vision' }"
+        @click="emit('select', 'vision')"
+      >
+        <span class="nav-badge" :style="{ background: VISION_META.color }">V</span>
+        <span class="nav-name">Vision MCP</span>
+        <span
+          class="svc-state"
+          :class="visionRunning ? 'on' : 'off'"
+          :title="visionRunning ? '运行中' : '已停止'"
+        ></span>
+        <span class="nav-count">{{ visionRunning ? "运行中" : "已停止" }}</span>
       </button>
       <div v-if="!services.length" class="nav-empty">
         <span class="nav-empty-text">暂无服务组件</span>

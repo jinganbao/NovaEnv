@@ -9,6 +9,7 @@
 pub mod launchd;
 pub mod mysql;
 pub mod redis;
+pub mod vision;
 
 use crate::models::ServiceInfo;
 

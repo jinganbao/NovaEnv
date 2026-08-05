@@ -163,3 +163,20 @@ export const SERVICE_META: Record<
   redis: { name: "Redis", letter: "R", color: "linear-gradient(135deg,#f87171,#b91c1c)" },
   mysql: { name: "MySQL", letter: "S", color: "linear-gradient(135deg,#22d3ee,#0e7490)" },
 };
+
+/** Vision MCP 服务状态 */
+export interface VisionInfo {
+  running: boolean;
+  pid: number | null;
+  logFile: string;
+  python: string | null;
+  depsReady: boolean;
+}
+
+/** Vision 展示元信息 */
+export const VISION_META = {
+  name: "Vision MCP",
+  letter: "V",
+  color: "linear-gradient(135deg,#a78bfa,#7c3aed)",
+  desc: "AI 视觉服务 · 供 Reasonix 等 MCP 客户端调用",
+};

@@ -6,6 +6,7 @@ import {
   availableVersions,
   listRuntimes,
   listServices,
+  visionStatus,
   previewActivation,
   uninstallVersion,
 } from "./api";
@@ -27,12 +28,13 @@ import SettingsView from "./components/SettingsView.vue";
 import AboutDialog from "./components/AboutDialog.vue";
 import UpdateDialog from "./components/UpdateDialog.vue";
 import Sidebar from "./components/Sidebar.vue";
+import VisionPanel from "./components/VisionPanel.vue";
 import UninstallModal from "./components/UninstallModal.vue";
 
 const kinds: RuntimeKind[] = ["java", "node", "go", "maven", "python", "rust"];
 const serviceKinds = ["redis", "mysql"] as const;
 
-type Selected = RuntimeKind | (typeof serviceKinds)[number] | "settings";
+type Selected = RuntimeKind | (typeof serviceKinds)[number] | "settings" | "vision";
 
 // 配置与主题（启动即应用持久化的主题设置）
 const config = useConfig();
@@ -145,7 +147,23 @@ function emptyService(kind: ServiceInfo["kind"]): ServiceInfo {
 let pollTimer: number | undefined;
 function startPolling() {
   loadServices();
-  pollTimer = window.setInterval(loadServices, 3000);
+  refreshVision();
+  pollTimer = window.setInterval(() => {
+    loadServices();
+    refreshVision();
+  }, 3000);
+}
+
+// ---- Vision MCP ----
+
+const visionRunning = ref(false);
+async function refreshVision() {
+  try {
+    const v = await visionStatus();
+    visionRunning.value = v.running;
+  } catch {
+    // 静默
+  }
 }
 
 // ---- 切换默认 ----
@@ -300,6 +318,7 @@ onUnmounted(() => {
         :selected="selected"
         :counts="counts"
         :services="services"
+        :vision-running="visionRunning"
         @select="selected = $event"
       />
 
@@ -311,6 +330,7 @@ onUnmounted(() => {
           正在扫描本机开发环境…
         </div>
         <SettingsView v-else-if="selected === 'settings'" />
+        <VisionPanel v-else-if="selected === 'vision'" />
         <ServiceDetail
           v-else-if="selected === 'redis' || selected === 'mysql'"
           :key="selected"
