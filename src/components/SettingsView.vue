@@ -235,6 +235,55 @@ h3 {
   color: var(--text-muted);
 }
 
+/* 开关 */
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+/* 关闭行为说明：对齐开关 */
+.switch-row + .row-hint {
+  margin: 2px 0 0 84px;
+}
+
+.switch-track {
+  width: 40px;
+  height: 22px;
+  border-radius: 99px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  position: relative;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.switch-track.on {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+
+.switch-track.on .switch-thumb {
+  transform: translateX(18px);
+}
+
+.switch-label {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
 .error-text {
   color: var(--danger);
 }

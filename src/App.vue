@@ -249,6 +249,7 @@ onMounted(() => {
   }).catch(() => {});
 });
 
+
 onUnmounted(() => {
   window.clearInterval(pollTimer);
 });

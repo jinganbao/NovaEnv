@@ -505,7 +505,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<()> {
     let hide = PredefinedMenuItem::hide(app, Some("隐藏 NovaEnv"))?;
     let hide_others = PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?;
     let show_all = PredefinedMenuItem::show_all(app, Some("全部显示"))?;
-    let quit = PredefinedMenuItem::quit(app, Some("退出 NovaEnv"))?;
+    let quit = MenuItem::with_id(app, "app-quit", "退出 NovaEnv", true, Some("Cmd+Q"))?;
     let app_menu = Submenu::with_items(
         app,
         app_name,
@@ -576,6 +576,10 @@ fn build_menu(app: &tauri::App) -> tauri::Result<()> {
             use tauri::Emitter;
             let _ = app.emit("novaenv-about", ());
         }
+        "app-quit" => {
+            // 强制退出（Cmd+Q / 菜单退出），不驻留
+            app.exit(0);
+        }
         "menu-update" => {
             use tauri::Emitter;
             let _ = app.emit("novaenv-check-update", ());
@@ -600,11 +604,22 @@ fn build_menu(app: &tauri::App) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     app_log("app", &format!("NovaEnv 启动 v{}", env!("CARGO_PKG_VERSION")));
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .setup(|app| {
+            use tauri::Manager;
             self_check();
             if let Err(e) = build_menu(app) {
                 eprintln!("菜单构建失败: {e}");
+            }
+            // 关闭窗口 → 驻留 Dock（隐藏窗口，应用继续运行；Cmd+Q / 菜单退出才完全退出）
+            if let Some(window) = app.get_webview_window("main") {
+                let w = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = w.hide();
+                    }
+                });
             }
             Ok(())
         })
@@ -635,6 +650,16 @@ pub fn run() {
             app_version,
             open_url
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+    // Dock 图标点击 → 恢复窗口（驻留模式）
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Reopen { .. } = event {
+            use tauri::Manager;
+            if let Some(w) = app_handle.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }
+    });
 }
