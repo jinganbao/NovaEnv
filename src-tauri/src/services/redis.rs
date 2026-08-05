@@ -603,6 +603,7 @@ pub fn start(version: &str) -> Result<(), String> {
     if is_running(version) {
         return Ok(()); // 已在运行
     }
+    let _ = crate::services::launchd::stop("redis", version); // 防 launchd 残留
     let conf = conf_file(version);
     if !conf.is_file() {
         return Err("配置文件缺失，请重新安装".to_string());
@@ -638,9 +639,6 @@ pub fn start(version: &str) -> Result<(), String> {
 /// 停止服务：launchd 托管时 bootout，否则 SIGTERM → SIGKILL 兜底
 #[cfg(target_os = "macos")]
 pub fn stop(version: &str) -> Result<(), String> {
-    if autostart_enabled(version) {
-        return crate::services::launchd::stop("redis", version);
-    }
     if !is_running(version) {
         // 可能只有端口被占（非本服务管理）——不强行处理
         return Ok(());
@@ -654,8 +652,9 @@ pub fn stop(version: &str) -> Result<(), String> {
     // 完成判断用进程存活（不用端口——改端口后 conf 端口≠进程实际端口）
     for _ in 0..20 {
         if !is_running(version) {
-            // 清理残留 pid 文件
+            // 清理残留 pid 文件 + 防止 launchd 重拉
             let _ = std::fs::remove_file(pid_file(version));
+            let _ = crate::services::launchd::stop("redis", version);
             return Ok(());
         }
         std::thread::sleep(Duration::from_millis(200));
@@ -663,15 +662,13 @@ pub fn stop(version: &str) -> Result<(), String> {
     // 超时 SIGKILL
     unsafe { libc::kill(pid as i32, libc::SIGKILL) };
     let _ = std::fs::remove_file(pid_file(version));
+    let _ = crate::services::launchd::stop("redis", version);
     Ok(())
 }
 
 /// 重启
 #[cfg(target_os = "macos")]
 pub fn restart(version: &str) -> Result<(), String> {
-    if autostart_enabled(version) {
-        return crate::services::launchd::restart("redis", version);
-    }
     let running = is_running(version);
     if running {
         stop(version)?;

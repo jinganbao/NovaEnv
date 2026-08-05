@@ -472,6 +472,7 @@ pub fn start(version: &str) -> Result<(), String> {
     if is_running(version) {
         return Ok(());
     }
+    let _ = crate::services::launchd::stop("mysql", version); // 防 launchd 残留
     let conf = conf_file(version);
     if !conf.is_file() {
         return Err("配置文件缺失，请重新安装".to_string());
@@ -515,9 +516,6 @@ pub fn start(version: &str) -> Result<(), String> {
 /// 停止服务：launchd 托管时 bootout，否则 mysqladmin shutdown → SIGTERM 兜底
 #[cfg(target_os = "macos")]
 pub fn stop(version: &str) -> Result<(), String> {
-    if autostart_enabled(version) {
-        return crate::services::launchd::stop("mysql", version);
-    }
     if !is_running(version) {
         return Ok(());
     }
@@ -544,6 +542,7 @@ pub fn stop(version: &str) -> Result<(), String> {
     for _ in 0..20 {
         if !is_running(version) {
             let _ = std::fs::remove_file(pid_file(version));
+            let _ = crate::services::launchd::stop("mysql", version);
             return Ok(());
         }
         std::thread::sleep(Duration::from_millis(200));
@@ -553,15 +552,13 @@ pub fn stop(version: &str) -> Result<(), String> {
         unsafe { libc::kill(pid as i32, libc::SIGTERM) };
     }
     let _ = std::fs::remove_file(pid_file(version));
+    let _ = crate::services::launchd::stop("mysql", version);
     Ok(())
 }
 
 /// 重启
 #[cfg(target_os = "macos")]
 pub fn restart(version: &str) -> Result<(), String> {
-    if autostart_enabled(version) {
-        return crate::services::launchd::restart("mysql", version);
-    }
     let running = is_running(version);
     if running {
         stop(version)?;
