@@ -153,7 +153,7 @@ fn read_pid() -> Option<u32> {
 /// 当前状态
 pub fn info() -> VisionInfo {
     let pid = read_pid();
-    let running = pid.is_some_and(|p| pid_alive(p));
+    let running = pid.is_some_and(pid_alive);
     VisionInfo {
         running,
         pid: running.then_some(pid.unwrap_or(0)),
