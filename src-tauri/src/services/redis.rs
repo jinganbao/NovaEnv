@@ -90,13 +90,16 @@ pub fn info() -> ServiceInfo {
             .into_iter()
             .map(|v| {
                 let conf = read_conf(&v);
+                // launchd 托管检测：仅当 plist 存在时走 launchctl print（精准、开销小）
+                let managed = crate::services::launchd::plist_path("redis", &v).exists();
+                let running = pid_alive(&v) || (managed && crate::services::launchd::is_loaded("redis", &v));
                 ServiceInfo {
                     kind: ServiceKind::Redis,
                     name: NAME.to_string(),
                     installed: true,
                     version: Some(v.clone()),
                     versions: Vec::new(),
-                    running: is_running(&v),
+                    running,
                     port: conf.as_ref().map(|c| c.port).unwrap_or(DEFAULT_PORT),
                     pid: read_pid(&v),
                     password: conf.map(|c| c.password).unwrap_or_default(),
@@ -186,11 +189,20 @@ pub fn is_port_open(port: u16) -> bool {
 /// 不能再用 conf 端口探测——修改端口后 conf 已变，但进程仍监听启动时端口，
 /// 会导致误判并跳过配置修改后的自动重启
 #[cfg(target_os = "macos")]
-fn is_running(version: &str) -> bool {
+/// pid 文件对应进程是否存活（launchd 托管进程无 pid 文件）
+fn pid_alive(version: &str) -> bool {
     let Some(pid) = read_pid(version) else {
         return false;
     };
     unsafe { libc::kill(pid as i32, 0) == 0 }
+}
+
+fn is_running(version: &str) -> bool {
+    if pid_alive(version) {
+        return true;
+    }
+    // launchd 托管中（自启拉起、无 pid 文件）也视为运行中
+    crate::services::launchd::is_loaded("redis", version)
 }
 
 #[cfg(target_os = "macos")]
@@ -270,13 +282,23 @@ fn parse_version_html(html: &str) -> Vec<String> {
     versions
 }
 
-/// 解析官方版本目录页
+/// 解析版本目录页：国内镜像（华为云）优先，官方源回退
 fn fetch_versions_from_official() -> Result<Vec<String>, String> {
-    let html = crate::installer::http_get_text("https://download.redis.io/releases/")?;
-    let mut versions = parse_version_html(&html);
+    const MIRROR: &str = "https://mirrors.huaweicloud.com/redis/";
+    const OFFICIAL: &str = "https://download.redis.io/releases/";
+    let mut versions = Vec::new();
+    for url in [MIRROR, OFFICIAL] {
+        if let Ok(html) = crate::installer::http_get_text(url) {
+            let parsed = parse_version_html(&html);
+            if !parsed.is_empty() {
+                versions = parsed;
+                break;
+            }
+        }
+    }
     versions.sort_by(|a, b| cmp_versions(b, a));
     if versions.is_empty() {
-        return Err("Redis 版本源未解析到可用版本".to_string());
+        return Err("Redis 版本源（华为云/官方）均未解析到可用版本".to_string());
     }
     Ok(versions)
 }
@@ -317,7 +339,7 @@ pub fn install(
 
     emit(app, kind, version, "downloading", Some(0), "开始下载");
 
-    // 1) 下载源码包（官方源，回退 GitHub）
+    // 1) 下载源码包（内部：华为云镜像 → 官方 → GitHub，三级回退）
     let downloads = crate::installer::installs_dir().join("_downloads");
     std::fs::create_dir_all(&downloads).map_err(|e| format!("创建下载目录失败: {e}"))?;
     let archive = downloads.join(format!("redis-{version}.tar.gz"));
@@ -411,7 +433,7 @@ pub fn install(
     Ok(())
 }
 
-/// 下载（官方源失败回退 GitHub archive；进度经 service-progress 推送，MB 显示）
+/// 下载（国内镜像优先 → 官方 → GitHub archive；进度经 service-progress 推送，MB 显示）
 #[cfg(target_os = "macos")]
 fn download_with_fallback(
     app: &tauri::AppHandle,
@@ -420,17 +442,29 @@ fn download_with_fallback(
     primary: &str,
     dest: &Path,
 ) -> Result<(), String> {
+    let mirror = format!("https://mirrors.huaweicloud.com/redis/redis-{version}.tar.gz");
     let fallback = format!("https://github.com/redis/redis/archive/refs/tags/{version}.tar.gz");
-    if download(app, kind, version, primary, dest).is_err() {
+    // 优先国内镜像（实测快 30 倍）
+    if download(app, kind, version, &mirror, dest).is_err() {
         emit(
             app,
             kind,
             version,
             "downloading",
             None,
-            "官方源不可用，切换 GitHub 镜像…",
+            "镜像不可用，切换官方源…",
         );
-        download(app, kind, version, &fallback, dest)?;
+        if download(app, kind, version, primary, dest).is_err() {
+            emit(
+                app,
+                kind,
+                version,
+                "downloading",
+                None,
+                "官方源不可用，切换 GitHub 镜像…",
+            );
+            download(app, kind, version, &fallback, dest)?;
+        }
     }
     Ok(())
 }
@@ -642,6 +676,10 @@ pub fn stop(version: &str) -> Result<(), String> {
     if !is_running(version) {
         // 可能只有端口被占（非本服务管理）——不强行处理
         return Ok(());
+    }
+    // launchd 托管中：bootout 卸载（KeepAlive 不再拉起）
+    if crate::services::launchd::is_loaded("redis", version) {
+        return crate::services::launchd::stop("redis", version);
     }
     let Some(pid) = read_pid(version) else {
         return Ok(());

@@ -75,8 +75,13 @@ const expandedVer = ref("");
 /** 本地乐观运行状态（操作成功立即翻转，避免全量 refresh 导致页面闪烁） */
 const localRunning = ref<Record<string, boolean>>({});
 
+/** 版本运行状态：优先本地乐观值，回退服务端扫描结果（service.versions[].running） */
 function runningOf(version: string): boolean {
-  return localRunning.value[version] ?? false;
+  const local = localRunning.value[version];
+  if (local !== undefined) return local;
+  const v = props.service.versions.find((x) => x.version === version);
+  if (v) return v.running;
+  return props.service.running;
 }
 
 /** 操作成功后延迟后台校准（等 toast 呈现后平滑刷新，消除视觉闪烁） */
@@ -154,14 +159,23 @@ const installedText = computed(() =>
   props.service.versions.map((v) => v.version).join("、"),
 );
 
+/** 版本列表会话级缓存（切回同服务不重复网络拉取，消除切换卡顿） */
+const versionsCache = new Map<string, { at: number; groups: AvailableVersionGroup[] }>();
+
 /** 该大版本是否已装有最新版本（无更新则隐藏升级按钮） */
 async function loadVersions() {
-  // 每次拉取（后端有 5 分钟磁盘缓存，开销极小）；
-  // 组件通过 :key 按服务重建，避免版本列表串用
+  const key = props.service.kind;
+  const hit = versionsCache.get(key);
+  if (hit && Date.now() - hit.at < 5 * 60_000) {
+    versions.value = hit.groups;
+    return;
+  }
   loadingVersions.value = true;
   try {
     versions.value = await availableServiceVersions(props.service.kind);
+    versionsCache.set(key, { at: Date.now(), groups: versions.value });
   } catch (e) {
+    // 拉取失败不阻塞界面（保留缓存旧值或空态）
     result.value = { ok: false, text: `获取版本列表失败: ${e}` };
   } finally {
     loadingVersions.value = false;

@@ -104,13 +104,16 @@ pub fn info() -> ServiceInfo {
             .into_iter()
             .map(|v| {
                 let conf = read_conf(&v);
+                // launchd 托管检测：仅当 plist 存在时走 launchctl print（精准、开销小）
+                let managed = crate::services::launchd::plist_path("mysql", &v).exists();
+                let running = pid_alive(&v) || (managed && crate::services::launchd::is_loaded("mysql", &v));
                 ServiceInfo {
                     kind: ServiceKind::MySql,
                     name: NAME.to_string(),
                     installed: true,
                     version: Some(v.clone()),
                     versions: Vec::new(),
-                    running: is_running(&v),
+                    running,
                     port: conf.as_ref().map(|c| c.port).unwrap_or(DEFAULT_PORT),
                     pid: read_pid(&v),
                     password: conf.map(|c| c.password).unwrap_or_default(),
@@ -208,11 +211,20 @@ fn read_pid(version: &str) -> Option<u32> {
 /// 不能再用 conf 端口探测——修改端口后 conf 已变，但进程仍监听启动时端口，
 /// 会导致误判并跳过配置修改后的自动重启
 #[cfg(target_os = "macos")]
-fn is_running(version: &str) -> bool {
+/// pid 文件对应进程是否存活（launchd 托管进程无 pid 文件）
+fn pid_alive(version: &str) -> bool {
     let Some(pid) = read_pid(version) else {
         return false;
     };
     unsafe { libc::kill(pid as i32, 0) == 0 }
+}
+
+fn is_running(version: &str) -> bool {
+    if pid_alive(version) {
+        return true;
+    }
+    // launchd 托管中（自启拉起、无 pid 文件）也视为运行中
+    crate::services::launchd::is_loaded("mysql", version)
 }
 
 /// socket 文件路径（客户端强制走 socket，绝不连到用户已有实例）
@@ -518,6 +530,10 @@ pub fn start(version: &str) -> Result<(), String> {
 pub fn stop(version: &str) -> Result<(), String> {
     if !is_running(version) {
         return Ok(());
+    }
+    // launchd 托管中：bootout 卸载（KeepAlive 不再拉起）
+    if crate::services::launchd::is_loaded("mysql", version) {
+        return crate::services::launchd::stop("mysql", version);
     }
     let conf = read_conf(version).unwrap_or(ServiceConfig {
         port: DEFAULT_PORT,
