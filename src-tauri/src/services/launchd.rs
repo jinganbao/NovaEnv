@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 /// launchd Label 前缀
@@ -134,7 +134,8 @@ pub fn disable(kind: &str, version: &str) -> Result<(), String> {
 /// launchctl 查询结果短缓存（3s TTL，按 label 独立）。
 /// `is_loaded` 在 3s 服务状态轮询中对每个已装版本各 spawn 一次 `/bin/launchctl print`，
 /// 多版本时开销叠加；短缓存让同一 label 在轮询周期内最多查一次。
-static LOADED_CACHE: Mutex<HashMap<String, (Instant, bool)>> = Mutex::new(HashMap::new());
+static LOADED_CACHE: LazyLock<Mutex<HashMap<String, (Instant, bool)>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 const LOADED_CACHE_TTL: Duration = Duration::from_secs(3);
 
 /// 使 `is_loaded` 的短缓存失效（写操作前调用，避免命中旧状态误判）
