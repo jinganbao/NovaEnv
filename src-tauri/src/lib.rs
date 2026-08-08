@@ -37,11 +37,15 @@ fn activate(version: RuntimeVersion) -> Result<(), String> {
 
 /// 获取官方源的可安装版本列表（按大版本分组，带 5 分钟缓存）。
 #[tauri::command]
-fn available_versions(
+async fn available_versions(
     kind: RuntimeKind,
     refresh: Option<bool>,
 ) -> Result<Vec<AvailableVersionGroup>, String> {
-    installer::available_versions(kind, refresh.unwrap_or(false))
+    tauri::async_runtime::spawn_blocking(move || {
+        installer::available_versions(kind, refresh.unwrap_or(false))
+    })
+    .await
+    .map_err(|e| format!("获取版本列表任务异常: {e}"))?
 }
 
 /// 安装指定版本（异步执行，进度通过 `install-progress` 事件推送）。
@@ -114,17 +118,23 @@ fn get_manage_info() -> ManageInfo {
 
 /// 全部服务组件状态（安装情况 / 运行状态 / 端口）。
 #[tauri::command]
-fn list_services() -> Vec<ServiceInfo> {
-    services::list_all()
+async fn list_services() -> Vec<ServiceInfo> {
+    tauri::async_runtime::spawn_blocking(services::list_all)
+        .await
+        .unwrap_or_default()
 }
 
 /// 服务的可安装版本列表（按大版本分组，最新在前）。
 #[tauri::command]
-fn available_service_versions(kind: ServiceKind) -> Result<Vec<AvailableVersionGroup>, String> {
-    match kind {
+async fn available_service_versions(
+    kind: ServiceKind,
+) -> Result<Vec<AvailableVersionGroup>, String> {
+    tauri::async_runtime::spawn_blocking(move || match kind {
         ServiceKind::Redis => services::redis::available_version_groups(),
         ServiceKind::MySql => services::mysql::available_version_groups(),
-    }
+    })
+    .await
+    .map_err(|e| format!("获取服务版本列表任务异常: {e}"))?
 }
 
 /// 安装服务（异步执行，进度经 `service-progress` 事件推送；支持端口/密码配置）。

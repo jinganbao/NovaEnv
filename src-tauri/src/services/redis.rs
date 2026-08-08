@@ -16,8 +16,9 @@ use std::path::Path;
 #[cfg(target_os = "macos")]
 use std::os::unix::process::CommandExt;
 use std::process::Command;
-#[cfg(target_os = "macos")]
+use std::sync::Mutex;
 use std::time::Duration;
+use std::time::Instant;
 
 #[cfg(target_os = "macos")]
 use tauri::Emitter;
@@ -222,10 +223,22 @@ const FALLBACK_VERSIONS: &[&str] = &[
     "6.0.20",
 ];
 
+/// 版本列表内存缓存（5 分钟 TTL；避免每次进入服务页都发起网络请求导致 UI 卡顿）
+static VERSION_GROUPS_CACHE: Mutex<Option<(Instant, Vec<AvailableVersionGroup>)>> =
+    Mutex::new(None);
+const VERSION_CACHE_TTL: Duration = Duration::from_secs(300);
+
 /// 服务可安装版本（按大版本分组，最新在前；官方源不可达时回退内置版本表）
 pub fn available_version_groups() -> Result<Vec<AvailableVersionGroup>, String> {
+    if let Some((at, groups)) = VERSION_GROUPS_CACHE.lock().unwrap().as_ref() {
+        if at.elapsed() < VERSION_CACHE_TTL {
+            return Ok(groups.clone());
+        }
+    }
     let versions = available_versions()?;
-    Ok(group_versions(&versions))
+    let groups = group_versions(&versions);
+    *VERSION_GROUPS_CACHE.lock().unwrap() = Some((Instant::now(), groups.clone()));
+    Ok(groups)
 }
 
 /// 扁平版本列表 → 按大版本分组（versions 已倒序，每组首个即最新）
@@ -282,20 +295,26 @@ fn parse_version_html(html: &str) -> Vec<String> {
     versions
 }
 
-/// 解析版本目录页：国内镜像（华为云）优先，官方源回退
+/// 解析版本目录页：国内镜像（华为云）与官方源并行发起，取先解析成功者
+/// （串行最坏 20s×2=40s，并行最坏 20s；且任一源可用即可）
 fn fetch_versions_from_official() -> Result<Vec<String>, String> {
     const MIRROR: &str = "https://mirrors.huaweicloud.com/redis/";
     const OFFICIAL: &str = "https://download.redis.io/releases/";
-    let mut versions = Vec::new();
-    for url in [MIRROR, OFFICIAL] {
-        if let Ok(html) = crate::installer::http_get_text(url) {
-            let parsed = parse_version_html(&html);
-            if !parsed.is_empty() {
-                versions = parsed;
-                break;
+    let mut versions = std::thread::scope(|s| {
+        let mirror = s.spawn(|| crate::installer::http_get_text(MIRROR));
+        let official = s.spawn(|| crate::installer::http_get_text(OFFICIAL));
+        let mut picked: Vec<String> = Vec::new();
+        for html in [mirror.join(), official.join()] {
+            if let Ok(Ok(html)) = html {
+                let parsed = parse_version_html(&html);
+                if !parsed.is_empty() {
+                    picked = parsed;
+                    break;
+                }
             }
         }
-    }
+        picked
+    });
     versions.sort_by(|a, b| cmp_versions(b, a));
     if versions.is_empty() {
         return Err("Redis 版本源（华为云/官方）均未解析到可用版本".to_string());
@@ -634,6 +653,7 @@ pub fn start(version: &str) -> Result<(), String> {
     if !server.is_file() {
         return Err(format!("Redis {version} 未安装"));
     }
+    crate::services::launchd::invalidate_loaded_cache(); // 写操作前强制真实查询
     if is_running(version) {
         return Ok(()); // 已在运行
     }
@@ -673,6 +693,7 @@ pub fn start(version: &str) -> Result<(), String> {
 /// 停止服务：launchd 托管时 bootout，否则 SIGTERM → SIGKILL 兜底
 #[cfg(target_os = "macos")]
 pub fn stop(version: &str) -> Result<(), String> {
+    crate::services::launchd::invalidate_loaded_cache(); // 写操作前强制真实查询
     if !is_running(version) {
         // 可能只有端口被占（非本服务管理）——不强行处理
         return Ok(());
@@ -707,6 +728,7 @@ pub fn stop(version: &str) -> Result<(), String> {
 /// 重启
 #[cfg(target_os = "macos")]
 pub fn restart(version: &str) -> Result<(), String> {
+    crate::services::launchd::invalidate_loaded_cache(); // 写操作前强制真实查询
     let running = is_running(version);
     if running {
         stop(version)?;
@@ -720,6 +742,7 @@ pub fn restart(version: &str) -> Result<(), String> {
 /// 设置/取消开机自启（launchd 托管：RunAtLoad 自启 + KeepAlive 崩溃拉起）
 #[cfg(target_os = "macos")]
 pub fn set_autostart(version: &str, enabled: bool) -> Result<(), String> {
+    crate::services::launchd::invalidate_loaded_cache(); // 写操作前强制真实查询
     let server = version_dir(version).join("bin").join("redis-server");
     if !server.is_file() {
         return Err(format!("Redis {version} 未安装"));

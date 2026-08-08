@@ -1,3 +1,9 @@
+<script lang="ts">
+/** 版本列表模块级缓存（切回同服务不重复网络拉取，消除切换卡顿；
+ *  放在 `<script setup>` 之外，组件重挂载（切 tab）不会清空） */
+const versionsCache = new Map<string, { at: number; groups: AvailableVersionGroup[] }>();
+</script>
+
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import {
@@ -158,9 +164,6 @@ async function refreshLog() {
 const installedText = computed(() =>
   props.service.versions.map((v) => v.version).join("、"),
 );
-
-/** 版本列表会话级缓存（切回同服务不重复网络拉取，消除切换卡顿） */
-const versionsCache = new Map<string, { at: number; groups: AvailableVersionGroup[] }>();
 
 /** 该大版本是否已装有最新版本（无更新则隐藏升级按钮） */
 async function loadVersions() {
